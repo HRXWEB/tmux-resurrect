@@ -31,7 +31,7 @@ class StandaloneCodexTests(unittest.TestCase):
                     if not k.startswith(("CMUX", "TMUX", "CODEX", "RESURRECT"))}
         self.env.update(PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                         CODEX_HOME=str(self.home), CODEX_TEST_LOG_DIR=str(self.logs),
-                        CODEX_TEST_HOOK=str(ROOT / "scripts/codex_hook.py"),
+                        CODEX_TEST_HOOK=str(ROOT / "scripts/codex_session_recorder.py"),
                         CODEX_TEST_EMITTER=str(ROOT / "tests/fixtures/emit_codex_hook.py"), LC_ALL="C")
         self.config = self.base / "tmux.conf"
         self.config.write_text("\n".join([
@@ -169,7 +169,7 @@ class StandaloneCodexTests(unittest.TestCase):
         pid = self.launch(); self.fire(pid, A); before = self.binding()
         payload = {"session_id": B, "hook_event_name": "SessionStart", "cwd": str(self.base),
                    "transcript_path": str(self.transcript(B))}
-        r = subprocess.run(["python3", str(ROOT / "scripts/codex_hook.py")],
+        r = subprocess.run(["python3", str(ROOT / "scripts/codex_session_recorder.py")],
                            input=json.dumps(payload), text=True, capture_output=True,
                            env={**self.env, "TMUX_PANE": "%0"})
         self.assertEqual(r.returncode, 0, r.stderr)

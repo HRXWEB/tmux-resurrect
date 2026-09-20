@@ -4,6 +4,8 @@ This fork adds optional [Codex conversation restoration](docs/codex.md).
 An independent Codex hook records each tmux pane's session ID; saves restore
 with `codex resume <session-id>`. Works on the tmux host without cmux.
 The upstream save strategy remains the default.
+For Codex, follow the [TPM setup instructions](docs/codex.md#tpm-installation-recommended):
+enabling the Codex strategy automatically registers its hooks when TPM loads the plugin.
 
 [![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
 
@@ -70,16 +72,19 @@ overwritten.
 
 Add plugin to the list of TPM plugins in `.tmux.conf`:
 
-    set -g @plugin 'tmux-plugins/tmux-resurrect'
+    set -g @plugin 'HRXWEB/tmux-resurrect#cmux-codex-resume'
 
 Hit `prefix + I` to fetch the plugin and source it. You should now be able to
 use the plugin.
+
+If upstream resurrect is already installed, see the
+[migration note](docs/codex.md#tpm-installation-recommended) before installing this fork.
 
 ### Manual Installation
 
 Clone the repo:
 
-    $ git clone https://github.com/tmux-plugins/tmux-resurrect ~/clone/path
+    $ git clone --branch cmux-codex-resume https://github.com/HRXWEB/tmux-resurrect ~/clone/path
 
 Add this line to the bottom of `.tmux.conf`:
 

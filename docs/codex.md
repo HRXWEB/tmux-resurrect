@@ -15,44 +15,30 @@ them up or move them between machines.
 Requirements: macOS or Linux, tmux 3.2+, Bash, and Python 3.9+ on PATH. Native
 interactive Codex is supported. Recording was tested with Codex CLI 0.155.1.
 
-Clone the development branch into a permanent location:
+### TPM installation (recommended)
 
-```sh
-git clone --branch cmux-codex-resume https://github.com/HRXWEB/tmux-resurrect.git ~/src/tmux-resurrect-codex
-python3 ~/src/tmux-resurrect-codex/scripts/codex_hooks.py install
-```
-
-The installer adds two synchronous handlers, for `SessionStart` and
-`UserPromptSubmit`, to `~/.codex/hooks.json`. It preserves existing cmux and other
-hooks, backs up changed files, and is idempotent. Symlinked configurations keep
-their symlink. An invalid existing file is never overwritten.
-
-For a custom Codex home, run the installer for that home:
-
-```sh
-python3 ~/src/tmux-resurrect-codex/scripts/codex_hooks.py install --codex-home /path/to/codex-home
-```
-
-`CODEX_HOME` is also honored. Keep it absolute when launching Codex. Use the same
-home for installation and execution. The configured hook points at this
-checkout, so rerun installation if you move the checkout.
-
-In Codex, use `/hooks` to review and trust the two added handlers. Installing the
-file does not grant trust; the installer never edits trust hashes or disables
-trust checks. If you explicitly disabled hooks in Codex configuration, enable
-them again. Start a new Codex process after setup and submit a test message.
-See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks).
-
-Configure tmux to load this checkout instead of upstream resurrect:
+Replace the upstream resurrect entry with this fork in your tmux configuration.
+Put these settings before the existing TPM initialization line:
 
 ```tmux
 set -g @resurrect-save-command-strategy 'codex'
 set -g @resurrect-processes '"~codex resume"'
-run-shell ~/src/tmux-resurrect-codex/resurrect.tmux
+set -g @plugin 'HRXWEB/tmux-resurrect#cmux-codex-resume'
 ```
 
-Load exactly one copy of resurrect: remove the old upstream TPM entry when
-switching to this manual loader. If you already set `@resurrect-processes`, add
+Press **prefix + I**. TPM downloads and loads the fork; with the `codex` strategy
+enabled, the plugin automatically registers its Codex hooks. No separate Python
+installation command or manual `run-shell .../resurrect.tmux` line is needed.
+Python 3.9+ must still be installed on the tmux host.
+
+**Migrating an existing upstream installation:** TPM uses the repository basename
+as the installation directory. Both upstream and this fork use `tmux-resurrect`,
+so merely changing the GitHub owner does not replace the existing checkout.
+Move the old `tmux-resurrect` plugin directory outside your TPM plugin directory
+as a backup, then press prefix + I to fetch this fork. Keep your snapshot
+directory. Load exactly one copy of resurrect.
+
+If you already set `@resurrect-processes`, add
 `"~codex resume"` to that existing value instead of replacing your other entries.
 The example adds only Codex to resurrect's built-in default restore list.
 
@@ -61,20 +47,91 @@ The three lines have separate roles:
 - `@resurrect-save-command-strategy 'codex'` selects how commands are captured
   **when saving**. For a verified Codex pane, it writes the exact resume command;
   ordinary panes use upstream process capture. It does not change which saved
-  commands are allowed to run during restore.
+  commands are allowed to run during restore. Selecting this strategy also
+  enables automatic hook registration when the plugin loads.
 - `@resurrect-processes '"~codex resume"'` adds that command to the allowlist
   **when restoring**. Without a matching rule (or an existing restore-all setting),
   the command can be saved but will not be launched on restore. The `~` means
   match anywhere in the saved command, including after an `env CODEX_HOME=...`
   prefix. The inner quotes keep `codex resume` together as one matching rule.
-- `run-shell .../resurrect.tmux` loads this fork and its save/restore key bindings;
-  it does not install the Codex hooks. Run the hook installer above separately.
+- `@plugin 'HRXWEB/tmux-resurrect#cmux-codex-resume'` tells TPM to install and load
+  this fork's development branch, including its save/restore key bindings.
 
 Do not replace the exact command with an inline `codex->codex resume --last`
 rule: each pane must retain its own saved session ID.
 
-No configuration changes are made just by cloning the repository or running its
-tests. The strategy is opt-in; upstream `ps` behavior remains the default.
+### What automatic setup changes
+
+On plugin load, `scripts/codex_hook_setup.py` adds two synchronous handlers, for
+`SessionStart` and `UserPromptSubmit`, to the selected Codex home's `hooks.json`.
+Both call `scripts/codex_session_recorder.py`, which records the pane/session
+mapping when Codex fires an event. Codex supplies `session_id` through its native
+hook input; it does not register this tmux recorder automatically.
+
+Setup preserves existing hooks, backs up changed files, and keeps symlinked
+configurations as symlinks. Repeated loads leave unchanged files untouched.
+Concurrent plugin loads serialize configuration updates. Old registrations of
+this plugin's `codex_hook.py` are replaced by the renamed recorder without
+duplicating the handlers. User hooks with similar filenames are preserved.
+
+In Codex, use `/hooks` to review and trust the two added handlers. Installing the
+file does not grant trust; setup never edits trust hashes or disables trust
+checks. Changed hook definitions, including the recorder rename, need review
+again. If you explicitly disabled hooks in Codex configuration, enable them.
+Start a new Codex process after setup and submit a test message.
+See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks).
+
+The default location is `~/.codex`. To use a custom home, put this before TPM
+initialization so plugin setup and newly started panes receive the same value:
+
+```tmux
+set-environment -g CODEX_HOME '/absolute/path/to/codex-home'
+```
+
+An existing `CODEX_HOME` in the tmux server environment is also honored. An export
+made only inside one pane does not change the server environment. For additional
+homes used by other panes, the optional setup command remains available:
+
+```sh
+python3 <plugin-directory>/scripts/codex_hook_setup.py install --codex-home /absolute/path/to/another-home
+```
+
+Here and below, `<plugin-directory>` means the checkout installed by TPM, or your
+manual checkout. Reloading the plugin repairs its recorder path after a move.
+
+Automatic setup failures show a tmux message and leave the existing configuration
+intact. Other plugins and resurrect key bindings still load. Inspect registration
+status with:
+
+```sh
+tmux show-option -gqv @resurrect-codex-hooks-status
+```
+
+`registered` means configuration is present, not that Codex has trusted or run
+the hooks. `error` means setup failed; check Python 3.9+ and the selected home's
+`hooks.json`, then reload your tmux configuration to retry. The optional setup
+command above can also show the error directly.
+
+Loading with the default `ps` strategy does not register hooks. Cloning the
+repository or running its tests does not change your production configuration.
+
+### Manual installation (alternative)
+
+Clone the development branch into a permanent location:
+
+```sh
+git clone --branch cmux-codex-resume https://github.com/HRXWEB/tmux-resurrect.git ~/src/tmux-resurrect-codex
+```
+
+Use the two strategy/process settings above, and replace the TPM plugin entry
+with:
+
+```tmux
+run-shell ~/src/tmux-resurrect-codex/resurrect.tmux
+```
+
+Reload your tmux configuration. This entrypoint performs the same automatic hook
+registration; a separate setup command is not required here either.
 
 ## Recording and saving
 
@@ -99,7 +156,7 @@ supply another pane's identity.
 The read-only inspection command is:
 
 ```sh
-python3 ~/src/tmux-resurrect-codex/scripts/codex_session.py <pane-pid>
+python3 <plugin-directory>/scripts/codex_session.py <pane-pid>
 ```
 
 Run it with `TMUX` pointing at the server being inspected. Get the pane's root
@@ -160,13 +217,17 @@ attach. See [continuum's documentation](https://github.com/tmux-plugins/tmux-con
 
 ## Uninstall the recording hooks
 
+First switch the save strategy back to `ps` and reload your tmux configuration,
+so future plugin loads no longer register the hooks. Before deleting the plugin
+checkout, remove its handlers:
+
 ```sh
-python3 ~/src/tmux-resurrect-codex/scripts/codex_hooks.py uninstall
+python3 <plugin-directory>/scripts/codex_hook_setup.py uninstall
 ```
 
-Use the same `--codex-home` if you installed into a custom home. This removes only
-this plugin's handlers. Switch tmux's save strategy back to `ps` when disabling
-recording. Existing Codex conversations and saved snapshots are not deleted.
+Pass `--codex-home` for each custom home, or run with that home's `CODEX_HOME`.
+This removes only this plugin's handlers. Disabling the strategy alone does not
+remove registrations. Existing conversations and saved snapshots are not deleted.
 
 ## Development checks
 
@@ -180,7 +241,17 @@ scripts on private sockets. Temporary Codex metadata is synthetic; the tests do
 not contact a model or require cmux. Coverage includes same-directory panes,
 subagent and unrelated-process rejection, conversation switches, stale process
 identity, preserved homes/options, installer preservation and deferred saves.
-GitHub Actions runs the same suite on macOS and Linux.
+Plugin-loading tests also verify automatic setup, repeated/concurrent loads,
+legacy recorder migration, and recoverable setup failures. To run the actual TPM
+install-binding test locally, provide a TPM checkout:
+
+```sh
+RESURRECT_TEST_TPM=/path/to/tpm python3 -m unittest discover -s tests -p 'test_codex*.py' -v
+```
+
+It invokes the command bound to prefix + I against a local fixture repository
+and private tmux server; it does not install into your normal TPM directory.
+GitHub Actions runs the complete suite with pinned TPM on macOS and Linux.
 
 ## Live verification (September 20, 2026)
 

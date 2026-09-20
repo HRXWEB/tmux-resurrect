@@ -2,6 +2,7 @@
 """Add/remove only this plugin's hooks. Never change trust or other hooks."""
 import argparse
 import copy
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -21,7 +22,9 @@ def ours(hook):
         return False
     try:
         args = shlex.split(hook.get("command", ""))
-        return len(args) == 3 and Path(args[1]).name == "codex_hook.py" and args[2] == MARKER
+        # Upgrade the original recorder name as well as moved/current installs.
+        return (len(args) == 3 and args[2] == MARKER
+                and Path(args[1]).name in ("codex_hook.py", "codex_session_recorder.py"))
     except ValueError:
         return False
 
@@ -31,7 +34,7 @@ def update(config, install):
     if not isinstance(result, dict) or not isinstance(result.get("hooks", {}), dict):
         raise ValueError("hooks.json must contain an object with an optional hooks object")
     hooks = result.setdefault("hooks", {})
-    command = "python3 " + shlex.quote(str(Path(__file__).resolve().with_name("codex_hook.py"))) + " " + MARKER
+    command = "python3 " + shlex.quote(str(Path(__file__).resolve().with_name("codex_session_recorder.py"))) + " " + MARKER
     for event in EVENTS:
         groups = hooks.get(event, [])
         if not isinstance(groups, list):
@@ -53,24 +56,17 @@ def update(config, install):
     return result
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("install", "uninstall"))
-    parser.add_argument("--codex-home", default=os.environ.get("CODEX_HOME", "~/.codex"))
-    args = parser.parse_args()
-    try:
-        configured = Path(args.codex_home).expanduser().absolute() / "hooks.json"
-        path = configured.resolve()  # Preserve a dotfiles-managed symlink.
+def update_file(path, install):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Multiple tmux servers can load this plugin against the same Codex home.
+    lock_path = path.with_name("." + path.name + ".resurrect.lock")
+    with os.fdopen(os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         before = path.read_bytes() if path.exists() else None
-        if before is None and args.action == "uninstall":
-            print("No resurrect Codex hooks installed.")
-            return 0
         config = json.loads(before) if before is not None else {}
-        changed = update(config, args.action == "install")
+        changed = update(config, install)
         if changed == config:
-            print("Codex hooks already up to date.")
-            return 0
-        path.parent.mkdir(parents=True, exist_ok=True)
+            return False
         if before is not None:
             backup = path.with_name(path.name + ".bak." + str(time.time_ns()))
             shutil.copy2(path, backup)
@@ -90,6 +86,26 @@ def main():
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
+        return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=("install", "uninstall"))
+    parser.add_argument("--codex-home", default=os.environ.get("CODEX_HOME", "~/.codex"))
+    args = parser.parse_args()
+    if sys.version_info < (3, 9):
+        print("Resurrect Codex hooks require Python 3.9 or newer.", file=sys.stderr)
+        return 1
+    try:
+        configured = Path(args.codex_home).expanduser().absolute() / "hooks.json"
+        path = configured.resolve()  # Preserve a dotfiles-managed symlink.
+        if not path.exists() and args.action == "uninstall":
+            print("No resurrect Codex hooks installed.")
+            return 0
+        if not update_file(path, args.action == "install"):
+            print("Codex hooks already up to date.")
+            return 0
         print("Resurrect Codex hooks " + ("installed." if args.action == "install" else "removed."))
         if args.action == "install":
             print("In Codex, review/trust the two new hooks with /hooks. Existing hooks were preserved.")

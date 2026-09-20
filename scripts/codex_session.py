@@ -6,7 +6,7 @@ import sys
 
 from codex_common import (NotCodex, UnsafeSession, pane_codex, process_snapshot,
                           resume_command, select_record)
-from codex_hook import OPTION, tmux
+from codex_session_recorder import OPTION, tmux
 
 
 def main():

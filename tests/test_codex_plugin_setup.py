@@ -156,7 +156,7 @@ class PluginSetupTests(unittest.TestCase):
         config = self.assert_registered()
         command = config["hooks"]["SessionStart"][-1]["hooks"][0]["command"]
         self.assertEqual(Path(shlex.split(command)[1]).parent,
-                         plugins / "tmux-resurrect/scripts")
+                         (plugins / "tmux-resurrect/scripts").resolve())
 
 
 if __name__ == "__main__":
