@@ -182,6 +182,17 @@ class StandaloneCodexTests(unittest.TestCase):
         self.script("save.sh", success=False)
         self.assertFalse((self.snapshots / "last").exists())
 
+    def test_unverified_new_session_cannot_fall_back_to_prior_session(self):
+        pid = self.launch(); self.fire(pid, A); self.script("save.sh")
+        last = self.snapshots / "last"; before = (last.readlink(), last.read_bytes())
+        self.fire(pid, B, event="UserPromptSubmit",
+                  transcript_path=str(self.home / "sessions" / "not-ready.jsonl"))
+        self.script("save.sh", success=False)
+        self.assertEqual((last.readlink(), last.read_bytes()), before)
+        # A later valid event recovers without restarting the plugin/server.
+        self.fire(pid, B, event="UserPromptSubmit")
+        self.script("save.sh"); self.assertIn("codex resume " + B, self.commands()[0])
+
     def test_rapid_identical_saves_keep_last_valid(self):
         pid = self.launch(); self.fire(pid)
         self.script("save.sh"); expected = self.commands()
