@@ -22,9 +22,8 @@ def ours(hook):
         return False
     try:
         args = shlex.split(hook.get("command", ""))
-        # Upgrade the original recorder name as well as moved/current installs.
         return (len(args) == 3 and args[2] == MARKER
-                and Path(args[1]).name in ("codex_hook.py", "codex_session_recorder.py"))
+                and Path(args[1]).name == "codex_session_recorder.py")
     except ValueError:
         return False
 

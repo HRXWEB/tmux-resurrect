@@ -70,14 +70,11 @@ hook input; it does not register this tmux recorder automatically.
 
 Setup preserves existing hooks, backs up changed files, and keeps symlinked
 configurations as symlinks. Repeated loads leave unchanged files untouched.
-Concurrent plugin loads serialize configuration updates. Old registrations of
-this plugin's `codex_hook.py` are replaced by the renamed recorder without
-duplicating the handlers. User hooks with similar filenames are preserved.
+Concurrent plugin loads serialize configuration updates.
 
 In Codex, use `/hooks` to review and trust the two added handlers. Installing the
 file does not grant trust; setup never edits trust hashes or disables trust
-checks. Changed hook definitions, including the recorder rename, need review
-again. If you explicitly disabled hooks in Codex configuration, enable them.
+checks. If you explicitly disabled hooks in Codex configuration, enable them.
 Start a new Codex process after setup and submit a test message.
 See the [Codex hook documentation](https://learn.chatgpt.com/docs/hooks).
 
@@ -242,7 +239,7 @@ not contact a model or require cmux. Coverage includes same-directory panes,
 subagent and unrelated-process rejection, conversation switches, stale process
 identity, preserved homes/options, installer preservation and deferred saves.
 Plugin-loading tests also verify automatic setup, repeated/concurrent loads,
-legacy recorder migration, and recoverable setup failures. To run the actual TPM
+and recoverable setup failures. To run the actual TPM
 install-binding test locally, provide a TPM checkout:
 
 ```sh

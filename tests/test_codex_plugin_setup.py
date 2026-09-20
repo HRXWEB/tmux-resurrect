@@ -106,19 +106,6 @@ class PluginSetupTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(), "{}")
         self.assertTrue(self.tmux("list-keys", "-T", "prefix", "C-r").stdout.strip())
 
-    def test_reload_migrates_legacy_recorder_without_removing_similar_user_hook(self):
-        legacy = {"type": "command", "command":
-                  "python3 '/old plugin/scripts/codex_hook.py' --tmux-resurrect-codex-hook-v1"}
-        unrelated = {"type": "command", "command": "python3 /user/codex_hook.py"}
-        self.path.write_text(json.dumps({"hooks": {
-            event: [{"hooks": [legacy, unrelated]}] for event in ("SessionStart", "UserPromptSubmit")}}))
-        self.load()
-        config = self.assert_registered()
-        for event in ("SessionStart", "UserPromptSubmit"):
-            handlers = [hook for group in config["hooks"][event] for hook in group["hooks"]]
-            self.assertIn(unrelated, handlers)
-            self.assertNotIn(legacy, handlers)
-
     def test_concurrent_plugin_loads_create_only_one_registration_and_backup(self):
         self.path.write_text("{}")
         with ThreadPoolExecutor(max_workers=4) as pool:
