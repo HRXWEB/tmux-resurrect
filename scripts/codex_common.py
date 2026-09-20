@@ -212,4 +212,3 @@ def resume_command(record):
     command.extend(launch_options(args[1:]))
     command.extend(["--cd", cwd])
     return " ".join(shlex.quote(arg) for arg in command)
-
