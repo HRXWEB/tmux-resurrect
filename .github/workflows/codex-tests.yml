@@ -1,0 +1,34 @@
+name: Codex session restore
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Install tmux (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tmux build-essential
+      - name: Install tmux (macOS)
+        if: runner.os == 'macOS'
+        run: brew list tmux >/dev/null 2>&1 || brew install tmux
+      - name: Shell syntax
+        run: |
+          for script in scripts/*.sh save_command_strategies/*.sh strategies/*.sh; do
+            bash -n "$script"
+          done
+      - name: Unit and isolated tmux integration tests
+        run: python3 -m unittest discover -s tests -p 'test_*codex*.py' -v
