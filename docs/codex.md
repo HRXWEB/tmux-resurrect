@@ -47,15 +47,31 @@ Configure tmux to load this checkout instead of upstream resurrect:
 
 ```tmux
 set -g @resurrect-save-command-strategy 'codex'
-set -g @resurrect-processes 'yazi ssh claude lazygit "~codex resume"'
+set -g @resurrect-processes '"~codex resume"'
 run-shell ~/src/tmux-resurrect-codex/resurrect.tmux
 ```
 
 Load exactly one copy of resurrect: remove the old upstream TPM entry when
-switching to this manual loader. Keep your non-Codex process list as needed.
-The substring rule `"~codex resume"` matches commands prefixed with
-`env CODEX_HOME=...` too. Do not replace the exact command with an inline
-`codex->codex resume --last` rule.
+switching to this manual loader. If you already set `@resurrect-processes`, add
+`"~codex resume"` to that existing value instead of replacing your other entries.
+The example adds only Codex to resurrect's built-in default restore list.
+
+The three lines have separate roles:
+
+- `@resurrect-save-command-strategy 'codex'` selects how commands are captured
+  **when saving**. For a verified Codex pane, it writes the exact resume command;
+  ordinary panes use upstream process capture. It does not change which saved
+  commands are allowed to run during restore.
+- `@resurrect-processes '"~codex resume"'` adds that command to the allowlist
+  **when restoring**. Without a matching rule (or an existing restore-all setting),
+  the command can be saved but will not be launched on restore. The `~` means
+  match anywhere in the saved command, including after an `env CODEX_HOME=...`
+  prefix. The inner quotes keep `codex resume` together as one matching rule.
+- `run-shell .../resurrect.tmux` loads this fork and its save/restore key bindings;
+  it does not install the Codex hooks. Run the hook installer above separately.
+
+Do not replace the exact command with an inline `codex->codex resume --last`
+rule: each pane must retain its own saved session ID.
 
 No configuration changes are made just by cloning the repository or running its
 tests. The strategy is opt-in; upstream `ps` behavior remains the default.
