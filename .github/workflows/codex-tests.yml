@@ -33,6 +33,7 @@ jobs:
         run: brew list tmux >/dev/null 2>&1 || brew install tmux
       - name: Shell syntax
         run: |
+          tmux -V
           for script in resurrect.tmux scripts/*.sh save_command_strategies/*.sh strategies/*.sh; do
             bash -n "$script"
           done

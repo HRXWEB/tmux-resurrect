@@ -47,6 +47,16 @@ class PluginSetupTests(unittest.TestCase):
     def status(self):
         return self.tmux("show-options", "-gqv", "@resurrect-codex-hooks-status").stdout.strip()
 
+    def binding(self, key):
+        # Read the table rather than relying on version-specific single-key output.
+        for line in self.tmux("list-keys", "-T", "prefix").stdout.splitlines():
+            args = shlex.split(line)
+            if "-T" in args:
+                table = args.index("-T")
+                if args[table + 1:table + 3] == ["prefix", key]:
+                    return args[table + 3:]
+        self.fail(f"Missing prefix binding {key}; {self.tmux('-V').stdout.strip()}")
+
     def assert_registered(self):
         self.assertTrue(self.path.exists(), "plugin load did not register Codex hooks")
         config = json.loads(self.path.read_text())
@@ -88,7 +98,7 @@ class PluginSetupTests(unittest.TestCase):
         self.load()
         self.assertEqual(self.path.read_text(), "{broken")
         self.assertEqual(self.status(), "error")
-        self.assertTrue(self.tmux("list-keys", "-T", "prefix", "C-s").stdout.strip())
+        self.assertEqual(self.binding("C-s")[0], "run-shell")
         self.path.write_text("{}")
         self.load()
         self.assert_registered()
@@ -104,7 +114,7 @@ class PluginSetupTests(unittest.TestCase):
         self.load()
         self.assertEqual(self.status(), "error")
         self.assertEqual(self.path.read_text(), "{}")
-        self.assertTrue(self.tmux("list-keys", "-T", "prefix", "C-r").stdout.strip())
+        self.assertEqual(self.binding("C-r")[0], "run-shell")
 
     def test_concurrent_plugin_loads_create_only_one_registration_and_backup(self):
         self.path.write_text("{}")
@@ -138,8 +148,9 @@ class PluginSetupTests(unittest.TestCase):
         self.assertFalse(self.path.exists())
         # Execute precisely the command registered for prefix + I, in the
         # private server. No direct hook-installer invocation is involved.
-        binding = shlex.split(self.tmux("list-keys", "-T", "prefix", "I").stdout)
-        self.tmux(*binding[binding.index("run-shell"):])
+        binding = self.binding("I")
+        self.assertEqual(binding[0], "run-shell")
+        self.tmux(*binding)
         config = self.assert_registered()
         command = config["hooks"]["SessionStart"][-1]["hooks"][0]["command"]
         self.assertEqual(Path(shlex.split(command)[1]).parent,
