@@ -194,7 +194,7 @@ dump_panes() {
 			if is_session_grouped "$session_name"; then
 				continue
 			fi
-			full_command="$(pane_full_command $pane_pid)"
+			full_command="$(pane_full_command "$pane_pid")" || return 1
 			dir=$(echo $dir | sed 's/ /\\ /') # escape all spaces in directory path
 			echo "${line_type}${d}${session_name}${d}${window_number}${d}${window_active}${d}${window_flags}${d}${pane_index}${d}${pane_title}${d}${dir}${d}${pane_active}${d}${pane_command}${d}:${full_command}"
 		done
@@ -235,19 +235,51 @@ remove_old_backups() {
 		find "${files[@]}" -type f -mtime "+${delete_after}" -exec rm -v "{}" \; > /dev/null
 }
 
+# Only the opt-in Codex strategy needs transactional publication. A missing
+# hook after restore must not replace last with an empty/fresh Codex command.
+save_codex_layout() {
+	local staging_file published_file pending_link
+	staging_file="$(mktemp "$(resurrect_dir)/.codex-save.XXXXXX")" || return 1
+	published_file="${1%.txt}_${staging_file##*.}.txt"
+	if ! fetch_and_dump_grouped_sessions > "$staging_file" ||
+		! dump_panes >> "$staging_file" ||
+		! dump_windows >> "$staging_file" ||
+		! dump_state >> "$staging_file"; then
+		rm -f "$staging_file"
+		printf '%s\n' 'tmux-resurrect Codex: previous snapshot retained; save deferred' >&2
+		return 1
+	fi
+	mv "$staging_file" "$published_file" || return 1
+	if ! execute_hook "post-save-layout" "$published_file"; then
+		rm -f "$published_file"
+		return 1
+	fi
+	if files_differ "$published_file" "$(last_resurrect_file)"; then
+		pending_link="$(resurrect_dir)/.codex-last.${staging_file##*.}"
+		ln -s "$(basename "$published_file")" "$pending_link" &&
+			mv -f "$pending_link" "$(last_resurrect_file)" || return 1
+	else
+		rm "$published_file"
+	fi
+}
+
 save_all() {
 	local resurrect_file_path="$(resurrect_file_path)"
 	local last_resurrect_file="$(last_resurrect_file)"
 	mkdir -p "$(resurrect_dir)"
-	fetch_and_dump_grouped_sessions > "$resurrect_file_path"
-	dump_panes   >> "$resurrect_file_path"
-	dump_windows >> "$resurrect_file_path"
-	dump_state   >> "$resurrect_file_path"
-	execute_hook "post-save-layout" "$resurrect_file_path"
-	if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
-		ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"
+	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" == "codex" ]; then
+		save_codex_layout "$resurrect_file_path" || return 1
 	else
-		rm "$resurrect_file_path"
+		fetch_and_dump_grouped_sessions > "$resurrect_file_path"
+		dump_panes   >> "$resurrect_file_path"
+		dump_windows >> "$resurrect_file_path"
+		dump_state   >> "$resurrect_file_path"
+		execute_hook "post-save-layout" "$resurrect_file_path"
+		if files_differ "$resurrect_file_path" "$last_resurrect_file"; then
+			ln -fs "$(basename "$resurrect_file_path")" "$last_resurrect_file"
+		else
+			rm "$resurrect_file_path"
+		fi
 	fi
 	if capture_pane_contents_option_on; then
 		mkdir -p "$(pane_contents_dir "save")"
@@ -257,6 +289,7 @@ save_all() {
 	fi
 	remove_old_backups
 	execute_hook "post-save-all"
+	return 0
 }
 
 show_output() {
@@ -266,11 +299,19 @@ show_output() {
 main() {
 	if supported_tmux_version_ok; then
 		if show_output; then
-			start_spinner "Saving..." "Tmux environment saved!"
+			start_spinner "Saving..." ""
 		fi
-		save_all
+		if ! save_all; then
+			if show_output; then
+				stop_spinner
+				wait "$SPINNER_PID" 2>/dev/null
+				display_message "Save deferred; previous snapshot retained. Check Codex recording hooks."
+			fi
+			return 1
+		fi
 		if show_output; then
 			stop_spinner
+			wait "$SPINNER_PID" 2>/dev/null
 			display_message "Tmux environment saved!"
 		fi
 	fi
