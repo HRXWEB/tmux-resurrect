@@ -35,7 +35,9 @@ class StandaloneCodexTests(unittest.TestCase):
                         CODEX_TEST_EMITTER=str(ROOT / "tests/fixtures/emit_codex_hook.py"), LC_ALL="C")
         self.config = self.base / "tmux.conf"
         self.config.write_text("\n".join([
-            "set -g default-shell /bin/sh", "set -g default-command /bin/sh",
+            # An explicit /bin/sh default-command adds an extra parent shell
+            # under Linux dash; upstream ps intentionally captures direct children.
+            "set -g default-shell /bin/sh", "set -g default-command 'exec /bin/sh'",
             "set -g status off", "set -g base-index 0", "set -g pane-base-index 0",
             "set -g @resurrect-save-command-strategy codex",
             "set -g @resurrect-processes '\"~codex resume\"'",
