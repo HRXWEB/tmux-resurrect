@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a tmux pane against existing cmux Codex hook records.
-
-Exit 0: stdout is a complete resume command.
-Exit 2: no Codex in this pane; use the normal save-command strategy.
-Exit 1: Codex cannot be identified safely; save no process command.
-"""
+"""Process ownership and safe resume commands shared by Codex hooks and saves."""
 import datetime
 from dataclasses import dataclass
 import json
@@ -109,15 +104,15 @@ def select_record(pane_pid, processes, records):
             continue
         matches.append(record)
     if not matches:
-        raise UnsafeSession("no cmux hook record for this Codex process generation")
+        raise UnsafeSession("no Codex hook record for this Codex process generation")
     # /new and /resume can switch conversations without changing the process.
     latest = max(r["updatedAt"] for r in matches)
     matches = [r for r in matches if r["updatedAt"] == latest]
     if len({r.get("sessionId") for r in matches if isinstance(r.get("sessionId"), str)}) != 1:
-        raise UnsafeSession("ambiguous cmux hook records")
+        raise UnsafeSession("ambiguous Codex hook records")
     record = matches[0]
     if record.get("isRestorable") is False:
-        raise UnsafeSession("cmux marked the current conversation non-restorable")
+        raise UnsafeSession("hook marked the current conversation non-restorable")
     return record
 
 
@@ -194,7 +189,7 @@ def resume_command(record):
         raise UnsafeSession("invalid Codex session ID") from None
     launch = record.get("launchCommand")
     if not isinstance(launch, dict):
-        raise UnsafeSession("cmux launch capture is missing")
+        raise UnsafeSession("Codex launch capture is missing")
     args = launch.get("arguments")
     if (not isinstance(args, list) or not args or not all(isinstance(a, str) for a in args)
             or Path(args[0]).name != "codex"):
@@ -211,50 +206,10 @@ def resume_command(record):
         if not os.path.isabs(home):
             raise UnsafeSession("CODEX_HOME must be absolute")
         command.extend(["env", "CODEX_HOME=" + home])
-    # Resolve codex afresh on PATH, preserving installed cmux hooks and avoiding
-    # captured per-app temporary shims that may disappear on the next launch.
+    # Resolve Codex on PATH on the machine performing the restore; temporary
+    # launch shims and credentials do not belong in a durable tmux snapshot.
     command.extend(["codex", "resume", session])
     command.extend(launch_options(args[1:]))
     command.extend(["--cd", cwd])
     return " ".join(shlex.quote(arg) for arg in command)
 
-
-def read_records():
-    directory = Path(os.environ.get("CMUX_AGENT_HOOK_STATE_DIR", "~/.cmuxterm")).expanduser()
-    try:
-        with (directory / "codex-hook-sessions.json").open() as file:
-            store = json.load(file)
-        records = store["sessions"]
-        if not isinstance(records, dict):
-            raise ValueError()
-        return list(records.values())
-    except (OSError, ValueError, TypeError, KeyError):
-        raise UnsafeSession("cmux hook store is missing or unreadable") from None
-
-
-def main():
-    try:
-        if len(sys.argv) != 2 or not sys.argv[1].isdigit() or int(sys.argv[1]) <= 0:
-            raise UnsafeSession("invalid pane PID")
-        pane_pid = int(sys.argv[1])
-        processes = process_snapshot()
-        pane_codex(pane_pid, processes)  # Ordinary panes need no hook store.
-        record = select_record(pane_pid, processes, read_records())
-        command = resume_command(record)
-        # Recheck after reading the store, before committing the snapshot.
-        if pane_codex(pane_pid, process_snapshot()) != pane_codex(pane_pid, processes):
-            raise UnsafeSession("Codex process changed during save")
-        print(command)
-        return 0
-    except NotCodex:
-        return 2
-    except UnsafeSession as error:
-        print("tmux-resurrect cmux: skipping pane: " + str(error), file=sys.stderr)
-        return 1
-    except (OSError, subprocess.SubprocessError):
-        print("tmux-resurrect cmux: skipping pane: process inspection failed", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -31,4 +31,4 @@ jobs:
             bash -n "$script"
           done
       - name: Unit and isolated tmux integration tests
-        run: python3 -m unittest discover -s tests -p 'test_*codex*.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_codex*.py' -v

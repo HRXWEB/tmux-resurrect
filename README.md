@@ -1,8 +1,9 @@
 # Tmux Resurrect
 
-This fork adds an optional [cmux Codex session restore strategy](docs/cmux.md).
-It reuses cmux hook records to save an exact `codex resume <session-id>` command
-for each tmux pane. The upstream behavior remains the default.
+This fork adds optional [Codex conversation restoration](docs/codex.md).
+An independent Codex hook records each tmux pane's session ID; saves restore
+with `codex resume <session-id>`. Works on the tmux host without cmux.
+The upstream save strategy remains the default.
 
 [![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
 
