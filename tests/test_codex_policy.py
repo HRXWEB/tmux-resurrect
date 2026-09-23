@@ -67,6 +67,13 @@ class CodexPolicyTests(unittest.TestCase):
         with self.assertRaises(self.m.UnsafeSession):
             self.m.select_record(10, self.processes, [self.record(), latest])
 
+    def test_nonrestorable_marker_without_session_id_reports_its_state(self):
+        marker = self.record()
+        marker.pop("sessionId")
+        marker["isRestorable"] = False
+        with self.assertRaisesRegex(self.m.UnsafeSession, "non-restorable"):
+            self.m.select_record(10, self.processes, [marker])
+
     def test_exec_codex_at_pane_root_is_supported(self):
         self.assertEqual(self.m.select_record(20, self.processes, [self.record()])["sessionId"], A)
 

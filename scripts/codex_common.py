@@ -108,12 +108,11 @@ def select_record(pane_pid, processes, records):
     # /new and /resume can switch conversations without changing the process.
     latest = max(r["updatedAt"] for r in matches)
     matches = [r for r in matches if r["updatedAt"] == latest]
+    if any(r.get("isRestorable") is False for r in matches):
+        raise UnsafeSession("hook marked the current conversation non-restorable")
     if len({r.get("sessionId") for r in matches if isinstance(r.get("sessionId"), str)}) != 1:
         raise UnsafeSession("ambiguous Codex hook records")
-    record = matches[0]
-    if record.get("isRestorable") is False:
-        raise UnsafeSession("hook marked the current conversation non-restorable")
-    return record
+    return matches[0]
 
 
 VALUE_OPTIONS = {

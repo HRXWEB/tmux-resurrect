@@ -150,6 +150,19 @@ panes can share a cwd without sharing a conversation. PID reuse, a different
 foreground process, nested Codex executables and known subagent sessions cannot
 supply another pane's identity.
 
+You can also trigger a save from a shell without attaching a tmux client. Add a
+tmux command alias after loading tmux-resurrect:
+
+```tmux
+set -s command-alias[100] save-session='run-shell "\"#{@resurrect-save-script-path}\" 2>&1"'
+```
+
+Then run `tmux save-session`. This is a custom alias, not a built-in tmux
+subcommand. It uses the save script path published by tmux-resurrect, so it
+works with the plugin's configured save strategy, including Codex. Continuum's
+periodic saves continue to work independently. If a Codex pane has no verified
+hook record, the command prints the reason and retains the previous snapshot.
+
 The read-only inspection command is:
 
 ```sh
