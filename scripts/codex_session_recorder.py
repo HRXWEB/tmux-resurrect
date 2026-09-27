@@ -40,7 +40,7 @@ def tmux(socket, *args):
                           text=True, check=True, timeout=2).stdout.strip()
 
 
-def process_arguments(pid):
+def process_arguments(pid, env_name="CODEX_HOME"):
     """Read argv directly, never reconstruct a shell command from ps output."""
     if sys.platform == "darwin":
         libc = ctypes.CDLL(None, use_errno=True)
@@ -67,8 +67,9 @@ def process_arguments(pid):
         raise UnsafeSession("process inspection requires macOS or Linux")
     args = [v.decode("utf-8") for v in argv]
     # Do not retain or print the rest of the process environment.
+    prefix = env_name.encode("ascii") + b"="
     home = next((v.split(b"=", 1)[1].decode("utf-8") for v in entries
-                 if v.startswith(b"CODEX_HOME=")), None)
+                 if v.startswith(prefix)), None)
     return args, home
 
 

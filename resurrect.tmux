@@ -32,7 +32,8 @@ set_script_path_options() {
 }
 
 setup_codex_hooks() {
-	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" != "codex" ]; then
+	local strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
+	if [ "$strategy" != "codex" ] && [ "$strategy" != "ai_cli" ]; then
 		return 0
 	fi
 	local output
@@ -51,11 +52,27 @@ setup_codex_hooks() {
 	return 0
 }
 
+setup_claude_hooks() {
+	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" != "ai_cli" ]; then
+		return 0
+	fi
+	local output
+	if output=$(python3 "$CURRENT_DIR/scripts/claude_hook_setup.py" install 2>&1); then
+		tmux set-option -gq @resurrect-claude-hooks-status registered
+	else
+		tmux set-option -gq @resurrect-claude-hooks-status error
+		display_message "tmux-resurrect: Claude hook setup failed. Check Python and settings.json."
+		printf '%s\n' "$output" >&2
+	fi
+	return 0
+}
+
 main() {
 	set_save_bindings
 	set_restore_bindings
 	set_default_strategies
 	set_script_path_options
 	setup_codex_hooks
+	setup_claude_hooks
 }
 main

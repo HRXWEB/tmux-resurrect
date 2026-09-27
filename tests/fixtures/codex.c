@@ -45,7 +45,8 @@ int main(int argc, char **argv) {
     fprintf(file, "CODEX_HOME=%s\n", getenv("CODEX_HOME") ? getenv("CODEX_HOME") : "");
     fclose(file);
     int count = 0;
-    if (argc > 2 && !strcmp(argv[1], "resume") && !getenv("CODEX_TEST_SKIP_RESUME_HOOK"))
+    if (argc > 2 && (!strcmp(argv[1], "resume") || !strcmp(argv[1], "--resume"))
+        && !getenv("CODEX_TEST_SKIP_RESUME_HOOK"))
         hook(directory, ++count, argv[2]);
     for (;;) {
         if (pending) { pending = 0; hook(directory, ++count, NULL); }

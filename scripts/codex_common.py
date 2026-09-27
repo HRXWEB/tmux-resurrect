@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Process ownership and safe resume commands shared by Codex hooks and saves."""
+"""Process ownership shared by CLI hooks and safe Codex resume commands."""
 import datetime
 from dataclasses import dataclass
 import json
@@ -34,6 +34,10 @@ class Process:
     def is_codex(self):
         return Path(self.executable).name == "codex"
 
+    @property
+    def is_claude(self):
+        return Path(self.executable).name == "claude"
+
 
 def process_snapshot():
     # comm contains only the executable name, never a prompt or token in argv.
@@ -66,28 +70,32 @@ def ancestors(pid, processes):
 
 
 def pane_codex(pane_pid, processes):
+    return pane_agent(pane_pid, processes, "codex")
+
+
+def pane_agent(pane_pid, processes, name):
     pane = processes.get(pane_pid)
     if pane is None:
         raise UnsafeSession("pane process disappeared")
-    codex = [p for p in processes.values()
-             if p.is_codex and pane_pid in ancestors(p.pid, processes)]
-    if not codex:
+    agents = [p for p in processes.values()
+              if Path(p.executable).name == name and pane_pid in ancestors(p.pid, processes)]
+    if not agents:
         raise NotCodex()
     # A subagent may be another codex executable with the same cwd/TTY/group.
     # Only the top-level Codex process can own this pane's conversation.
-    codex_ids = {p.pid for p in codex}
-    roots = [p for p in codex if not any(
-        parent in codex_ids for parent in ancestors(p.ppid, processes))]
+    agent_ids = {p.pid for p in agents}
+    roots = [p for p in agents if not any(
+        parent in agent_ids for parent in ancestors(p.ppid, processes))]
     foreground = [p for p in roots if p.tty == pane.tty
                   and p.tty not in ("?", "??", "-")
                   and p.pgid > 0 and p.pgid == p.tpgid == pane.tpgid]
     if len(foreground) != 1:
-        raise UnsafeSession("no unique foreground Codex process")
+        raise UnsafeSession("no unique foreground " + name + " process")
     return foreground[0]
 
 
-def select_record(pane_pid, processes, records):
-    process = pane_codex(pane_pid, processes)
+def select_record(pane_pid, processes, records, name="codex"):
+    process = pane_agent(pane_pid, processes, name)
     matches = []
     for record in records:
         if not isinstance(record, dict):
@@ -104,7 +112,7 @@ def select_record(pane_pid, processes, records):
             continue
         matches.append(record)
     if not matches:
-        raise UnsafeSession("no Codex hook record for this Codex process generation")
+        raise UnsafeSession("no " + name + " hook record for this process generation")
     # /new and /resume can switch conversations without changing the process.
     latest = max(r["updatedAt"] for r in matches)
     matches = [r for r in matches if r["updatedAt"] == latest]

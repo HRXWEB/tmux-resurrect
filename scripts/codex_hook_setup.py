@@ -55,7 +55,7 @@ def update(config, install):
     return result
 
 
-def update_file(path, install):
+def update_file(path, install, updater=update):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Multiple tmux servers can load this plugin against the same Codex home.
     lock_path = path.with_name("." + path.name + ".resurrect.lock")
@@ -63,7 +63,7 @@ def update_file(path, install):
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = path.read_bytes() if path.exists() else None
         config = json.loads(before) if before is not None else {}
-        changed = update(config, install)
+        changed = updater(config, install)
         if changed == config:
             return False
         if before is not None:

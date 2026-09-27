@@ -235,18 +235,18 @@ remove_old_backups() {
 		find "${files[@]}" -type f -mtime "+${delete_after}" -exec rm -v "{}" \; > /dev/null
 }
 
-# Only the opt-in Codex strategy needs transactional publication. A missing
-# hook after restore must not replace last with an empty/fresh Codex command.
-save_codex_layout() {
+# Hook-backed strategies need transactional publication. A missing hook after
+# restore must not replace last with an empty or fresh agent command.
+save_verified_layout() {
 	local staging_file published_file pending_link
-	staging_file="$(mktemp "$(resurrect_dir)/.codex-save.XXXXXX")" || return 1
+	staging_file="$(mktemp "$(resurrect_dir)/.ai-cli-save.XXXXXX")" || return 1
 	published_file="${1%.txt}_${staging_file##*.}.txt"
 	if ! fetch_and_dump_grouped_sessions > "$staging_file" ||
 		! dump_panes >> "$staging_file" ||
 		! dump_windows >> "$staging_file" ||
 		! dump_state >> "$staging_file"; then
 		rm -f "$staging_file"
-		printf '%s\n' 'tmux-resurrect Codex: previous snapshot retained; save deferred' >&2
+		printf '%s\n' 'tmux-resurrect: previous snapshot retained; save deferred' >&2
 		return 1
 	fi
 	mv "$staging_file" "$published_file" || return 1
@@ -255,7 +255,7 @@ save_codex_layout() {
 		return 1
 	fi
 	if files_differ "$published_file" "$(last_resurrect_file)"; then
-		pending_link="$(resurrect_dir)/.codex-last.${staging_file##*.}"
+		pending_link="$(resurrect_dir)/.ai-cli-last.${staging_file##*.}"
 		ln -s "$(basename "$published_file")" "$pending_link" &&
 			mv -f "$pending_link" "$(last_resurrect_file)" || return 1
 	else
@@ -267,8 +267,9 @@ save_all() {
 	local resurrect_file_path="$(resurrect_file_path)"
 	local last_resurrect_file="$(last_resurrect_file)"
 	mkdir -p "$(resurrect_dir)"
-	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" == "codex" ]; then
-		save_codex_layout "$resurrect_file_path" || return 1
+	local save_strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
+	if [ "$save_strategy" == "codex" ] || [ "$save_strategy" == "ai_cli" ]; then
+		save_verified_layout "$resurrect_file_path" || return 1
 	else
 		fetch_and_dump_grouped_sessions > "$resurrect_file_path"
 		dump_panes   >> "$resurrect_file_path"
@@ -305,7 +306,7 @@ main() {
 			if show_output; then
 				stop_spinner
 				wait "$SPINNER_PID" 2>/dev/null
-				display_message "Save deferred; previous snapshot retained. Check Codex recording hooks."
+				display_message "Save deferred; previous snapshot retained. Check session recording hooks."
 			fi
 			return 1
 		fi

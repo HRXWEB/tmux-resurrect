@@ -1,5 +1,9 @@
 # Restore Codex conversations in tmux
 
+For exact restoration of both Codex and Claude Code sessions, use the
+[combined `ai_cli` strategy](ai_cli.md). The `codex` strategy described here
+remains Codex-only.
+
 This fork adds an opt-in `codex` save strategy and a small, independent Codex
 hook. It works on the machine running tmux and Codex, regardless of whether you
 view it through a local terminal, SSH, or a cmux ssh-tmux mirror. It does not

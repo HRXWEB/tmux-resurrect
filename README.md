@@ -1,11 +1,13 @@
 # Tmux Resurrect
 
-This fork adds optional [Codex conversation restoration](docs/codex.md).
-An independent Codex hook records each tmux pane's session ID; saves restore
-with `codex resume <session-id>`. Works on the tmux host without cmux.
+This fork adds optional [Codex conversation restoration](docs/codex.md) and
+[Codex plus Claude Code restoration](docs/ai_cli.md). Hooks record each tmux
+pane's session ID so saves restore its exact conversation. This works on the
+tmux host without cmux.
 The upstream save strategy remains the default.
-For Codex, follow the [TPM setup instructions](docs/codex.md#tpm-installation-recommended):
-enabling the Codex strategy automatically registers its hooks when TPM loads the plugin.
+For Codex alone, follow the [TPM setup instructions](docs/codex.md#tpm-installation-recommended).
+For both CLIs, use the [ai_cli strategy](docs/ai_cli.md). Loading either strategy
+automatically registers its required hooks.
 
 [![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
 
