@@ -21,8 +21,8 @@ class HookInstallerTests(unittest.TestCase):
         self.path.write_text(json.dumps(self.other))
 
     def run_installer(self, action, ok=True):
-        r = subprocess.run([sys.executable, str(ROOT / "scripts/codex_hook_setup.py"), action,
-                            "--codex-home", str(self.home)], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, str(ROOT / "scripts/conversation_hook_setup.py"), action,
+                            "--provider", "codex", "--config-dir", str(self.home)], capture_output=True, text=True)
         if ok:
             self.assertEqual(r.returncode, 0, r.stderr)
         else:

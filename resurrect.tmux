@@ -31,39 +31,20 @@ set_script_path_options() {
 	tmux set-option -gq "$restore_path_option" "$CURRENT_DIR/scripts/restore.sh"
 }
 
-setup_codex_hooks() {
-	local strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
-	if [ "$strategy" != "codex" ] && [ "$strategy" != "ai_cli" ]; then
+setup_conversation_hooks() {
+	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" != "conversation" ]; then
 		return 0
 	fi
-	local output
-	if output=$(python3 "$CURRENT_DIR/scripts/codex_hook_setup.py" install 2>&1); then
-		# Registration does not imply that Codex has trusted the hook definitions.
-		tmux set-option -gq @resurrect-codex-hooks-status registered
-		if [[ "$output" == "Resurrect Codex hooks installed."* ]]; then
-			display_message "tmux-resurrect: Codex hooks registered. Review/trust them in Codex /hooks."
+	local provider output
+	for provider in codex claude; do
+		if output=$(python3 "$CURRENT_DIR/scripts/conversation_hook_setup.py" install --provider "$provider" 2>&1); then
+			tmux set-option -gq "@resurrect-${provider}-hooks-status" registered
+		else
+			tmux set-option -gq "@resurrect-${provider}-hooks-status" error
+			display_message "tmux-resurrect: ${provider} hook setup failed. Check Python and settings."
+			printf '%s\n' "$output" >&2
 		fi
-	else
-		tmux set-option -gq @resurrect-codex-hooks-status error
-		display_message "tmux-resurrect: Codex hook setup failed. Check python3 (3.9+) and hooks.json, then reload tmux."
-		printf '%s\n' "$output" >&2
-	fi
-	# A setup failure must not prevent other tmux plugins from loading.
-	return 0
-}
-
-setup_claude_hooks() {
-	if [ "$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")" != "ai_cli" ]; then
-		return 0
-	fi
-	local output
-	if output=$(python3 "$CURRENT_DIR/scripts/claude_hook_setup.py" install 2>&1); then
-		tmux set-option -gq @resurrect-claude-hooks-status registered
-	else
-		tmux set-option -gq @resurrect-claude-hooks-status error
-		display_message "tmux-resurrect: Claude hook setup failed. Check Python and settings.json."
-		printf '%s\n' "$output" >&2
-	fi
+	done
 	return 0
 }
 
@@ -72,7 +53,6 @@ main() {
 	set_restore_bindings
 	set_default_strategies
 	set_script_path_options
-	setup_codex_hooks
-	setup_claude_hooks
+	setup_conversation_hooks
 }
 main

@@ -1,24 +1,27 @@
 # Restore Codex and Claude Code conversations
 
-The opt-in `ai_cli` save strategy records the exact session ID of each foreground
-Codex or Claude Code process in a tmux pane. It writes `codex resume <UUID>` or
+The opt-in `conversation` save strategy records the exact session ID of each
+foreground Codex or Claude Code process in a tmux pane. It writes `codex resume <UUID>` or
 `claude --resume <UUID>` into the tmux-resurrect snapshot. The conversations
 remain in each CLI's own local storage.
+
+Requirements: macOS or Linux, tmux 3.2+, Bash and Python 3.9+ on the tmux
+host. The CLI's own conversation files must be available there at restore time.
 
 ## Configuration
 
 Put these settings before TPM initialization:
 
 ```tmux
-set -g @resurrect-save-command-strategy 'ai_cli'
+set -g @resurrect-save-command-strategy 'conversation'
 set -g @resurrect-processes '"~codex resume" "~claude --resume"'
 ```
 
 Keep any other restore-list entries you already use. The save strategy chooses
 how to capture commands; the process list allows the resulting commands to run
-at restore time. The older `codex` strategy remains Codex-only.
+at restore time. This is the only hook-backed conversation strategy.
 
-Loading the plugin with `ai_cli` registers two hooks in the selected Codex
+Loading the plugin with `conversation` registers two hooks in the selected Codex
 home's `hooks.json` and two hooks in Claude Code's `settings.json`:
 `SessionStart` and `UserPromptSubmit`. The latter refreshes the binding after
 an in-process conversation switch. Codex hook trust still requires review in
@@ -31,7 +34,7 @@ before plugin initialization. A value exported in one pane does not configure
 the server's hook installer. For additional Claude homes, run:
 
 ```sh
-python3 <plugin-directory>/scripts/claude_hook_setup.py install --claude-config-dir /absolute/path
+python3 <plugin-directory>/scripts/conversation_hook_setup.py install --provider claude --config-dir /absolute/path
 ```
 
 `@resurrect-codex-hooks-status` and `@resurrect-claude-hooks-status` report
@@ -62,9 +65,9 @@ only the ID, not a copy of the conversation.
 To remove only this plugin's Claude hooks, run:
 
 ```sh
-python3 <plugin-directory>/scripts/claude_hook_setup.py uninstall
+python3 <plugin-directory>/scripts/conversation_hook_setup.py uninstall --provider claude
 ```
 
-Switch back to `codex` or `ps` before reloading the plugin if you no longer want
-Claude hooks registered. See [Codex details](codex.md) for the original
-recording model and transactional snapshot design.
+Switch back to `ps` before reloading the plugin if you no longer want
+conversation hooks registered. See [Codex details](codex.md) for the Codex
+provider rules.

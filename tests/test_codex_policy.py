@@ -3,6 +3,7 @@ import importlib
 from pathlib import Path
 import shlex
 import sys
+from types import SimpleNamespace
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -13,7 +14,13 @@ B = "01950000-0000-7000-8000-000000000002"
 class CodexPolicyTests(unittest.TestCase):
     def setUp(self):
         try:
-            self.m = importlib.import_module("codex_common")
+            common = importlib.import_module("conversation_common")
+            codex = importlib.import_module("conversation_codex")
+            self.m = SimpleNamespace(Process=common.Process, UnsafeSession=common.UnsafeSession,
+                                     NotCodex=common.NotAgent,
+                                     select_record=lambda pane, processes, records:
+                                     common.select_record(pane, processes, records, "codex"),
+                                     resume_command=codex.resume_command)
         except ModuleNotFoundError:
             self.fail("standalone Codex policy has not been implemented")
         p = self.m.Process

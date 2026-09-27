@@ -1,10 +1,29 @@
-"""Conservative Claude Code session resume policy."""
+"""Claude-specific transcript validation, launch policy, and resume command."""
 import os
 from pathlib import Path
 import shlex
 import uuid
 
-from codex_common import UnsafeSession, single_line
+from conversation_common import UnsafeSession, single_line
+
+NAME = "claude"
+ENV_NAME = "CLAUDE_CONFIG_DIR"
+DEFAULT_DIR = "~/.claude"
+SETTINGS_FILE = "settings.json"
+
+
+def root_session(payload, config_dir):
+    try:
+        session = str(uuid.UUID(payload["session_id"]))
+        path = Path(single_line(payload["transcript_path"])).resolve(strict=True)
+        root = Path(config_dir).expanduser().resolve(strict=True) / "projects"
+        if path.name != session + ".jsonl" or path.parent.parent != root:
+            raise UnsafeSession("Claude transcript is not a root session")
+        if not path.is_file():
+            raise UnsafeSession("Claude transcript is missing")
+        return session
+    except (KeyError, TypeError, ValueError, AttributeError, OSError):
+        raise UnsafeSession("Claude transcript identity unavailable") from None
 
 
 VALUE_OPTIONS = {"--model", "--permission-mode", "--effort", "--agent"}

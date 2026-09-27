@@ -9,5 +9,5 @@ session = sys.argv[1]
 project = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-fixture"
 payload = {"session_id": session, "hook_event_name": "SessionStart", "source": "resume",
            "cwd": os.getcwd(), "transcript_path": str(project / (session + ".jsonl"))}
-sys.exit(subprocess.run([sys.executable, os.environ["CODEX_TEST_HOOK"]],
+sys.exit(subprocess.run([sys.executable, os.environ["CODEX_TEST_HOOK"], os.environ["CODEX_TEST_PROVIDER"]],
                         input=json.dumps(payload), text=True).returncode)

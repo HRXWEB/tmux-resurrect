@@ -13,7 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 A = "01950000-0000-7000-8000-000000000001"
 B = "01950000-0000-7000-8000-000000000002"
-OPTION = "@resurrect-codex-session"
+OPTION = "@resurrect-conversation"
 
 
 @unittest.skipUnless(shutil.which("tmux") and shutil.which("cc"), "requires tmux and cc")
@@ -31,7 +31,8 @@ class StandaloneCodexTests(unittest.TestCase):
                     if not k.startswith(("CMUX", "TMUX", "CODEX", "RESURRECT"))}
         self.env.update(PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                         CODEX_HOME=str(self.home), CODEX_TEST_LOG_DIR=str(self.logs),
-                        CODEX_TEST_HOOK=str(ROOT / "scripts/codex_session_recorder.py"),
+                        CODEX_TEST_HOOK=str(ROOT / "scripts/conversation_hook.py"),
+                        CODEX_TEST_PROVIDER="codex",
                         CODEX_TEST_EMITTER=str(ROOT / "tests/fixtures/emit_codex_hook.py"), LC_ALL="C")
         self.config = self.base / "tmux.conf"
         self.config.write_text("\n".join([
@@ -39,7 +40,7 @@ class StandaloneCodexTests(unittest.TestCase):
             # under Linux dash; upstream ps intentionally captures direct children.
             "set -g default-shell /bin/sh", "set -g default-command 'exec /bin/sh'",
             "set -g status off", "set -g base-index 0", "set -g pane-base-index 0",
-            "set -g @resurrect-save-command-strategy codex",
+            "set -g @resurrect-save-command-strategy conversation",
             "set -g @resurrect-processes '\"~codex resume\"'",
             "set -g @resurrect-dir " + shlex.quote(str(self.snapshots)),
         ]) + "\n")
@@ -134,7 +135,7 @@ class StandaloneCodexTests(unittest.TestCase):
         self.tmux("set-option", "-p", "-t", "work:0.0", OPTION, "")
         r = self.script("save.sh", success=False)
         self.assertEqual((last.readlink(), last.read_bytes()), before)
-        self.assertIn("Codex", r.stderr)
+        self.assertIn("conversation", r.stderr)
 
     def test_restored_idle_process_without_hook_cannot_erase_resume_snapshot(self):
         pid = self.launch(); self.fire(pid); self.script("save.sh")
@@ -169,7 +170,7 @@ class StandaloneCodexTests(unittest.TestCase):
         pid = self.launch(); self.fire(pid, A); before = self.binding()
         payload = {"session_id": B, "hook_event_name": "SessionStart", "cwd": str(self.base),
                    "transcript_path": str(self.transcript(B))}
-        r = subprocess.run(["python3", str(ROOT / "scripts/codex_session_recorder.py")],
+        r = subprocess.run(["python3", str(ROOT / "scripts/conversation_hook.py"), "codex"],
                            input=json.dumps(payload), text=True, capture_output=True,
                            env={**self.env, "TMUX_PANE": "%0"})
         self.assertEqual(r.returncode, 0, r.stderr)

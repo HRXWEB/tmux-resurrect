@@ -1,13 +1,10 @@
 # Tmux Resurrect
 
-This fork adds optional [Codex conversation restoration](docs/codex.md) and
-[Codex plus Claude Code restoration](docs/ai_cli.md). Hooks record each tmux
-pane's session ID so saves restore its exact conversation. This works on the
-tmux host without cmux.
-The upstream save strategy remains the default.
-For Codex alone, follow the [TPM setup instructions](docs/codex.md#tpm-installation-recommended).
-For both CLIs, use the [ai_cli strategy](docs/ai_cli.md). Loading either strategy
-automatically registers its required hooks.
+This fork adds optional [Codex and Claude Code conversation restoration](docs/conversation.md).
+Hooks record each tmux pane's session ID so saves restore its exact conversation.
+This works on the tmux host without cmux. The upstream save strategy remains
+the default. The `conversation` strategy automatically registers the required
+hooks when the plugin loads.
 
 [![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
 
@@ -61,6 +58,7 @@ Optional:
 - [restoring a previously saved environment](docs/restoring_previously_saved_environment.md)
 
 Requirements / dependencies: `tmux 1.9` or higher, `bash`.
+The `conversation` strategy additionally requires tmux 3.2+ and Python 3.9+.
 
 Tested and working on Linux, OSX and Cygwin.
 
@@ -74,19 +72,19 @@ overwritten.
 
 Add plugin to the list of TPM plugins in `.tmux.conf`:
 
-    set -g @plugin 'HRXWEB/tmux-resurrect#cmux-codex-resume'
+    set -g @plugin 'HRXWEB/tmux-resurrect'
 
 Hit `prefix + I` to fetch the plugin and source it. You should now be able to
 use the plugin.
 
 If upstream resurrect is already installed, see the
-[migration note](docs/codex.md#tpm-installation-recommended) before installing this fork.
+[conversation setup guide](docs/conversation.md) before installing this fork.
 
 ### Manual Installation
 
 Clone the repo:
 
-    $ git clone --branch cmux-codex-resume https://github.com/HRXWEB/tmux-resurrect ~/clone/path
+    $ git clone https://github.com/HRXWEB/tmux-resurrect ~/clone/path
 
 Add this line to the bottom of `.tmux.conf`:
 

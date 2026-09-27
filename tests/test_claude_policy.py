@@ -14,9 +14,8 @@ B = "01950000-0000-7000-8000-000000000002"
 
 class ClaudePolicyTests(unittest.TestCase):
     def setUp(self):
-        self.common = importlib.import_module("codex_common")
-        self.claude = importlib.import_module("claude_common")
-        self.recorder = importlib.import_module("claude_session_recorder")
+        self.common = importlib.import_module("conversation_common")
+        self.claude = importlib.import_module("conversation_claude")
         p = self.common.Process
         self.processes = {10: p(10, 1, 10, 20, "pts/1", 100, "/bin/sh"),
                           20: p(20, 10, 20, 20, "pts/1", 101, "/opt/bin/claude"),
@@ -43,9 +42,9 @@ class ClaudePolicyTests(unittest.TestCase):
             self.common.select_record(10, self.processes, [self.record()], "claude")
 
     def test_background_codex_child_does_not_hide_foreground_claude(self):
-        dispatch = importlib.import_module("ai_cli_session")
+        dispatch = importlib.import_module("conversation_common")
         self.processes[21] = self.common.Process(21, 20, 21, 20, "pts/1", 103, "codex")
-        self.assertEqual(dispatch.select_agent(10, self.processes), "claude")
+        self.assertEqual(dispatch.foreground_agent(10, self.processes, ("codex", "claude"))[0], "claude")
 
     def test_nonrestorable_new_session_blocks_old_id(self):
         marker = self.record(B)
@@ -74,15 +73,15 @@ class ClaudePolicyTests(unittest.TestCase):
             project.mkdir(parents=True)
             path = project / (A + ".jsonl")
             path.write_text(json.dumps({"type": "user"}) + "\n")
-            self.assertEqual(self.recorder.root_session({"session_id": A,
-                                                         "transcript_path": str(path)}, root), A)
+            self.assertEqual(self.claude.root_session({"session_id": A,
+                                                       "transcript_path": str(path)}, root), A)
             with self.assertRaises(self.common.UnsafeSession):
-                self.recorder.root_session({"session_id": B, "transcript_path": str(path)}, root)
+                self.claude.root_session({"session_id": B, "transcript_path": str(path)}, root)
             child = project / A / "subagents" / (A + ".jsonl")
             child.parent.mkdir(parents=True)
             child.write_text("{}\n")
             with self.assertRaises(self.common.UnsafeSession):
-                self.recorder.root_session({"session_id": A, "transcript_path": str(child)}, root)
+                self.claude.root_session({"session_id": A, "transcript_path": str(child)}, root)
 
 
 if __name__ == "__main__":

@@ -44,7 +44,7 @@ class PluginSetupTests(unittest.TestCase):
         return subprocess.run(["tmux", "-S", str(self.socket), "-f", str(self.config), *args],
                               env=self.env, text=True, capture_output=True, check=check, timeout=30)
 
-    def load(self, strategy="codex"):
+    def load(self, strategy="conversation"):
         self.tmux("set-option", "-g", "@resurrect-save-command-strategy", strategy)
         self.tmux("run-shell", "bash " + shlex.quote(str(ROOT / "resurrect.tmux")))
 
@@ -68,10 +68,11 @@ class PluginSetupTests(unittest.TestCase):
         for event in ("SessionStart", "UserPromptSubmit"):
             self.assertIn(event, config["hooks"], "plugin load did not register the event")
             handlers = [hook for group in config["hooks"][event] for hook in group["hooks"]
-                        if "--tmux-resurrect-codex-hook-v1" in hook.get("command", "")]
+                        if "--tmux-resurrect-conversation-hook-v1" in hook.get("command", "")]
             self.assertEqual(len(handlers), 1)
             argv = shlex.split(handlers[0]["command"])
-            self.assertEqual(Path(argv[1]).name, "codex_session_recorder.py")
+            self.assertEqual(Path(argv[1]).name, "conversation_hook.py")
+            self.assertEqual(argv[2], "codex")
             self.assertTrue(Path(argv[1]).is_file(), "registered recorder must exist")
         self.assertEqual(self.status(), "registered")
         return config
@@ -98,20 +99,20 @@ class PluginSetupTests(unittest.TestCase):
         self.assertEqual(self.status(), "")
         self.assertTrue(self.tmux("show-options", "-gqv", "@resurrect-save-script-path").stdout.strip())
 
-    def test_ai_cli_registers_both_agents_once(self):
+    def test_conversation_registers_both_agents_once(self):
         self.claude_path.write_text('{"theme":"dark"}')
-        self.load("ai_cli")
+        self.load("conversation")
         self.assert_registered()
         config = json.loads(self.claude_path.read_text())
         self.assertEqual(config["theme"], "dark")
         for event in ("SessionStart", "UserPromptSubmit"):
             handlers = [hook for group in config["hooks"][event] for hook in group["hooks"]]
             self.assertEqual(len(handlers), 1)
-            self.assertIn("claude_session_recorder.py", handlers[0]["command"])
+            self.assertIn("conversation_hook.py claude", handlers[0]["command"])
         self.assertEqual(self.tmux("show-options", "-gqv", "@resurrect-claude-hooks-status").stdout.strip(),
                          "registered")
         previous = self.claude_path.read_bytes()
-        self.load("ai_cli")
+        self.load("conversation")
         self.assertEqual(self.claude_path.read_bytes(), previous)
 
     def test_bad_config_reports_failure_without_breaking_plugin_and_can_retry(self):
@@ -161,7 +162,7 @@ class PluginSetupTests(unittest.TestCase):
         plugins.mkdir()
         self.tmux("set-environment", "-g", "TMUX_PLUGIN_MANAGER_PATH", str(plugins))
         self.config.write_text(self.settings +
-            "set -g @resurrect-save-command-strategy codex\n" +
+            "set -g @resurrect-save-command-strategy conversation\n" +
             "set -g @resurrect-processes '\"~codex resume\"'\n" +
             "set -g @plugin " + shlex.quote(str(source) + "#test") + "\n" +
             "run-shell " + shlex.quote(str(Path(TPM) / "tpm")) + "\n")

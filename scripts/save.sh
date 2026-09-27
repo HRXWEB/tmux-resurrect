@@ -239,7 +239,7 @@ remove_old_backups() {
 # restore must not replace last with an empty or fresh agent command.
 save_verified_layout() {
 	local staging_file published_file pending_link
-	staging_file="$(mktemp "$(resurrect_dir)/.ai-cli-save.XXXXXX")" || return 1
+	staging_file="$(mktemp "$(resurrect_dir)/.conversation-save.XXXXXX")" || return 1
 	published_file="${1%.txt}_${staging_file##*.}.txt"
 	if ! fetch_and_dump_grouped_sessions > "$staging_file" ||
 		! dump_panes >> "$staging_file" ||
@@ -255,7 +255,7 @@ save_verified_layout() {
 		return 1
 	fi
 	if files_differ "$published_file" "$(last_resurrect_file)"; then
-		pending_link="$(resurrect_dir)/.ai-cli-last.${staging_file##*.}"
+		pending_link="$(resurrect_dir)/.conversation-last.${staging_file##*.}"
 		ln -s "$(basename "$published_file")" "$pending_link" &&
 			mv -f "$pending_link" "$(last_resurrect_file)" || return 1
 	else
@@ -268,7 +268,7 @@ save_all() {
 	local last_resurrect_file="$(last_resurrect_file)"
 	mkdir -p "$(resurrect_dir)"
 	local save_strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
-	if [ "$save_strategy" == "codex" ] || [ "$save_strategy" == "ai_cli" ]; then
+	if [ "$save_strategy" == "conversation" ]; then
 		save_verified_layout "$resurrect_file_path" || return 1
 	else
 		fetch_and_dump_grouped_sessions > "$resurrect_file_path"

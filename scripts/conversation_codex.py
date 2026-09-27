@@ -1,126 +1,42 @@
-#!/usr/bin/env python3
-"""Process ownership shared by CLI hooks and safe Codex resume commands."""
-import datetime
-from dataclasses import dataclass
+"""Codex-specific transcript validation, launch policy, and resume command."""
 import json
-import math
 import os
 from pathlib import Path
 import shlex
-import subprocess
-import sys
 import uuid
 
+from conversation_common import IgnoredSession, UnsafeSession, single_line
 
-class NotCodex(Exception):
-    pass
-
-
-class UnsafeSession(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class Process:
-    pid: int
-    ppid: int
-    pgid: int
-    tpgid: int
-    tty: str
-    started: int
-    executable: str
-
-    @property
-    def is_codex(self):
-        return Path(self.executable).name == "codex"
-
-    @property
-    def is_claude(self):
-        return Path(self.executable).name == "claude"
+NAME = "codex"
+ENV_NAME = "CODEX_HOME"
+DEFAULT_DIR = "~/.codex"
+SETTINGS_FILE = "hooks.json"
 
 
-def process_snapshot():
-    # comm contains only the executable name, never a prompt or token in argv.
-    result = subprocess.run(
-        ["ps", "-ww", "-ax", "-o", "pid=,ppid=,pgid=,tpgid=,tty=,lstart=,comm="],
-        capture_output=True, text=True, check=True, timeout=5,
-        env={**os.environ, "LC_ALL": "C"},
-    )
-    processes = {}
-    for line in result.stdout.splitlines():
-        fields = line.split(None, 10)
-        if len(fields) != 11:
-            continue
-        try:
-            started = int(datetime.datetime.strptime(
-                " ".join(fields[5:10]), "%a %b %d %H:%M:%S %Y").timestamp())
-            process = Process(*(int(f) for f in fields[:4]), fields[4], started, fields[10])
-        except (ValueError, OverflowError):
-            continue
-        processes[process.pid] = process
-    return processes
-
-
-def ancestors(pid, processes):
-    seen = set()
-    while pid in processes and pid not in seen:
-        seen.add(pid)
-        yield pid
-        pid = processes[pid].ppid
-
-
-def pane_codex(pane_pid, processes):
-    return pane_agent(pane_pid, processes, "codex")
-
-
-def pane_agent(pane_pid, processes, name):
-    pane = processes.get(pane_pid)
-    if pane is None:
-        raise UnsafeSession("pane process disappeared")
-    agents = [p for p in processes.values()
-              if Path(p.executable).name == name and pane_pid in ancestors(p.pid, processes)]
-    if not agents:
-        raise NotCodex()
-    # A subagent may be another codex executable with the same cwd/TTY/group.
-    # Only the top-level Codex process can own this pane's conversation.
-    agent_ids = {p.pid for p in agents}
-    roots = [p for p in agents if not any(
-        parent in agent_ids for parent in ancestors(p.ppid, processes))]
-    foreground = [p for p in roots if p.tty == pane.tty
-                  and p.tty not in ("?", "??", "-")
-                  and p.pgid > 0 and p.pgid == p.tpgid == pane.tpgid]
-    if len(foreground) != 1:
-        raise UnsafeSession("no unique foreground " + name + " process")
-    return foreground[0]
-
-
-def select_record(pane_pid, processes, records, name="codex"):
-    process = pane_agent(pane_pid, processes, name)
-    matches = []
-    for record in records:
-        if not isinstance(record, dict):
-            continue
-        # Validate process generation, not just a PID that can be recycled.
-        if (type(record.get("pid")) is not int or record["pid"] != process.pid
-                or type(record.get("pidStartSeconds")) is not int
-                or record["pidStartSeconds"] != process.started):
-            continue
-        updated = record.get("updatedAt")
-        if not isinstance(updated, (int, float)) or not math.isfinite(updated):
-            continue
-        if updated < process.started:
-            continue
-        matches.append(record)
-    if not matches:
-        raise UnsafeSession("no " + name + " hook record for this process generation")
-    # /new and /resume can switch conversations without changing the process.
-    latest = max(r["updatedAt"] for r in matches)
-    matches = [r for r in matches if r["updatedAt"] == latest]
-    if any(r.get("isRestorable") is False for r in matches):
-        raise UnsafeSession("hook marked the current conversation non-restorable")
-    if len({r.get("sessionId") for r in matches if isinstance(r.get("sessionId"), str)}) != 1:
-        raise UnsafeSession("ambiguous Codex hook records")
-    return matches[0]
+def root_session(payload, home):
+    try:
+        session = str(uuid.UUID(payload["session_id"]))
+        path = Path(single_line(payload["transcript_path"])).resolve(strict=True)
+        root = Path(home).expanduser().resolve(strict=True)
+        if not any(path.is_relative_to(root / folder) for folder in ("sessions", "archived_sessions")):
+            raise UnsafeSession("transcript is outside the Codex session directory")
+        with path.open("rb") as stream:
+            line = stream.readline(65537)
+        if len(line) > 65536:
+            raise UnsafeSession("session metadata is too large")
+        header = json.loads(line)
+        meta = header["payload"]
+        if header.get("type") != "session_meta" or meta.get("id") != session:
+            raise UnsafeSession("session metadata identity mismatch")
+        source = meta.get("source")
+        if ((isinstance(source, dict) and "subagent" in source)
+                or meta.get("thread_source") == "subagent" or source in ("exec", "review")):
+            raise IgnoredSession()
+        if source not in ("cli", "tui"):
+            raise UnsafeSession("session is not a verified root CLI conversation")
+        return session
+    except (KeyError, ValueError, TypeError, AttributeError):
+        raise UnsafeSession("unsupported Codex session metadata") from None
 
 
 VALUE_OPTIONS = {

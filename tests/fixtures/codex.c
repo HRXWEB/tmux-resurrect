@@ -22,7 +22,7 @@ static void hook(const char *directory, int count, const char *resume) {
             int fd = open(path, O_RDONLY);
             if (fd < 0) _exit(2);
             dup2(fd, STDIN_FILENO); close(fd);
-            execlp("python3", "python3", getenv("CODEX_TEST_HOOK"), (char *)NULL);
+            execlp("python3", "python3", getenv("CODEX_TEST_HOOK"), getenv("CODEX_TEST_PROVIDER"), (char *)NULL);
         }
         _exit(3);
     }

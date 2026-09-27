@@ -31,13 +31,14 @@ class ClaudeTmuxTests(unittest.TestCase):
                     if not k.startswith(("CMUX", "TMUX", "CODEX", "CLAUDE", "RESURRECT"))}
         self.env.update(PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                         CLAUDE_CONFIG_DIR=str(self.config_dir), CODEX_TEST_LOG_DIR=str(self.logs),
-                        CODEX_TEST_HOOK=str(ROOT / "scripts/claude_session_recorder.py"),
+                        CODEX_TEST_HOOK=str(ROOT / "scripts/conversation_hook.py"),
+                        CODEX_TEST_PROVIDER="claude",
                         CODEX_TEST_EMITTER=str(ROOT / "tests/fixtures/emit_claude_hook.py"), LC_ALL="C")
         self.config = self.base / "tmux.conf"
         self.config.write_text("\n".join([
             "set -g default-shell /bin/sh", "set -g default-command 'exec /bin/sh'",
             "set -g status off", "set -g base-index 0", "set -g pane-base-index 0",
-            "set -g @resurrect-save-command-strategy ai_cli",
+            "set -g @resurrect-save-command-strategy conversation",
             "set -g @resurrect-processes '\"~claude --resume\"'",
             "set -g @resurrect-dir " + shlex.quote(str(self.snapshots)),
         ]) + "\n")
@@ -103,7 +104,7 @@ class ClaudeTmuxTests(unittest.TestCase):
         self.script("restore.sh")
         self.wait(lambda: len(set(self.logs.glob("*.argv")) - old) == 2)
         self.wait(lambda: self.tmux("show-options", "-pqv", "-t", "work:0.0",
-                                   "@resurrect-claude-session").stdout.strip())
+                                   "@resurrect-conversation").stdout.strip())
         restored = [p.read_text().splitlines() for p in set(self.logs.glob("*.argv")) - old]
         self.assertEqual({tuple(a[1:3]) for a in restored}, {("--resume", A), ("--resume", B)})
         self.script("save.sh")
@@ -112,7 +113,7 @@ class ClaudeTmuxTests(unittest.TestCase):
         pid = self.launch("work:0.0"); self.fire(pid, A)
         self.script("save.sh")
         last = self.snapshots / "last"; before = (last.readlink(), last.read_bytes())
-        self.tmux("set-option", "-p", "-t", "work:0.0", "@resurrect-claude-session", "")
+        self.tmux("set-option", "-p", "-t", "work:0.0", "@resurrect-conversation", "")
         self.script("save.sh", success=False)
         self.assertEqual((last.readlink(), last.read_bytes()), before)
 

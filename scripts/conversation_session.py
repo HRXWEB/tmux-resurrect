@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Print a verified Codex resume command, 2 for non-Codex, 1 to defer save."""
+"""Print a verified resume command, 2 for ordinary panes, 1 to defer save."""
 import json
 import os
 import sys
 
-from codex_common import (NotCodex, UnsafeSession, pane_codex, process_snapshot,
-                          resume_command, select_record)
-from codex_session_recorder import OPTION, tmux
+from conversation_common import (NotAgent, UnsafeSession, foreground_agent,
+                                 process_snapshot, select_record, tmux)
+from conversation_hook import OPTION
+from conversation_providers import PROVIDERS
 
 
 def main():
@@ -15,7 +16,7 @@ def main():
             raise UnsafeSession("invalid pane PID")
         pane_pid = int(sys.argv[1])
         processes = process_snapshot()
-        owner = pane_codex(pane_pid, processes)
+        name, owner = foreground_agent(pane_pid, processes, PROVIDERS)
         socket = os.environ["TMUX"].rsplit(",", 2)[0]
         panes = tmux(socket, "list-panes", "-a", "-F", "#{pane_pid} #{pane_id}").splitlines()
         matches = {row.split()[1] for row in panes if row.split()[0] == str(pane_pid)}
@@ -24,22 +25,23 @@ def main():
         pane = matches.pop()
         raw = tmux(socket, "show-options", "-pqv", "-t", pane, OPTION)
         if not raw:
-            raise UnsafeSession("waiting for this Codex process's recording hook")
+            raise UnsafeSession("waiting for this process's recording hook")
         record = json.loads(raw)
-        if record.get("version") != 1 or record.get("paneId") != pane or record.get("panePID") != pane_pid:
+        if (record.get("version") != 1 or record.get("provider") != name
+                or record.get("paneId") != pane or record.get("panePID") != pane_pid):
             raise UnsafeSession("stale pane recording")
-        record = select_record(pane_pid, processes, [record])
-        command = resume_command(record)
-        if (pane_codex(pane_pid, process_snapshot()) != owner
+        record = select_record(pane_pid, processes, [record], name)
+        command = PROVIDERS[name].resume_command(record)
+        if (foreground_agent(pane_pid, process_snapshot(), PROVIDERS) != (name, owner)
                 or tmux(socket, "show-options", "-pqv", "-t", pane, OPTION) != raw):
-            raise UnsafeSession("Codex changed during save")
+            raise UnsafeSession("conversation changed during save")
         print(command)
         return 0
-    except NotCodex:
+    except NotAgent:
         return 2
     except Exception as error:
         message = str(error) if isinstance(error, UnsafeSession) else "recording unavailable"
-        print("tmux-resurrect Codex: save deferred: " + message, file=sys.stderr)
+        print("tmux-resurrect conversation: save deferred: " + message, file=sys.stderr)
         return 1
 
 

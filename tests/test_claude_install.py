@@ -20,8 +20,8 @@ class ClaudeInstallTests(unittest.TestCase):
         self.path.write_text(json.dumps(self.original))
 
     def run_installer(self, action):
-        result = subprocess.run([sys.executable, str(ROOT / "scripts/claude_hook_setup.py"), action,
-                                 "--claude-config-dir", str(self.home)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/conversation_hook_setup.py"), action,
+                                 "--provider", "claude", "--config-dir", str(self.home)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_install_reload_uninstall(self):
