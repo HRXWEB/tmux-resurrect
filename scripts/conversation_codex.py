@@ -11,6 +11,7 @@ NAME = "codex"
 ENV_NAME = "CODEX_HOME"
 DEFAULT_DIR = "~/.codex"
 SETTINGS_FILE = "hooks.json"
+HOOK_CHILD_SUBCOMMANDS = frozenset({"app-server"})
 
 
 def root_session(payload, home):
@@ -32,7 +33,12 @@ def root_session(payload, home):
         if ((isinstance(source, dict) and "subagent" in source)
                 or meta.get("thread_source") == "subagent" or source in ("exec", "review")):
             raise IgnoredSession()
-        if source not in ("cli", "tui"):
+        # Current Codex TUI can use its app-server backend, whose root
+        # conversation is recorded with source=vscode. Keep the originator
+        # check so ordinary editor conversations cannot bind this pane.
+        tui_backend = (source == "vscode" and meta.get("originator") == "codex-tui"
+                       and meta.get("thread_source") == "user")
+        if source not in ("cli", "tui") and not tui_backend:
             raise UnsafeSession("session is not a verified root CLI conversation")
         return session
     except (KeyError, ValueError, TypeError, AttributeError):

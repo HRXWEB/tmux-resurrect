@@ -1,10 +1,13 @@
 """Identity and command-policy regression tests using synthetic hook records."""
 import importlib
+import json
 from pathlib import Path
 import shlex
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 A = "01950000-0000-7000-8000-000000000001"
@@ -83,6 +86,37 @@ class CodexPolicyTests(unittest.TestCase):
 
     def test_exec_codex_at_pane_root_is_supported(self):
         self.assertEqual(self.m.select_record(20, self.processes, [self.record()])["sessionId"], A)
+
+    def test_app_server_hook_descendant_belongs_to_foreground_codex(self):
+        common = importlib.import_module("conversation_common")
+        provider = importlib.import_module("conversation_codex")
+        process = self.m.Process
+        self.processes[21] = process(21, 20, 21, 20, "?", 103, "codex")
+        self.processes[22] = process(22, 21, 21, 20, "?", 104, "python3")
+        owner = common.pane_agent(10, self.processes, "codex")
+        with patch.object(common, "process_arguments", return_value=(["codex", "app-server"], None)):
+            common.verify_hook_owner(22, owner, self.processes, provider)
+        with patch.object(common, "process_arguments", return_value=(["codex"], None)):
+            with self.assertRaises(common.UnsafeSession):
+                common.verify_hook_owner(22, owner, self.processes, provider)
+
+    def test_tui_app_server_root_session_is_accepted(self):
+        codex = importlib.import_module("conversation_codex")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            transcript = root / "sessions" / "session.jsonl"
+            transcript.parent.mkdir()
+            payload = {"session_id": A, "transcript_path": str(transcript)}
+            meta = {"id": A, "source": "vscode", "originator": "codex-tui",
+                    "thread_source": "user"}
+            transcript.write_text(json.dumps({"type": "session_meta", "payload": meta}) + "\n")
+            self.assertEqual(codex.root_session(payload, root), A)
+            for change in ({"originator": "vscode"}, {"thread_source": "subagent"}):
+                with self.subTest(change=change):
+                    transcript.write_text(json.dumps({"type": "session_meta",
+                                                      "payload": {**meta, **change}}) + "\n")
+                    with self.assertRaises((codex.UnsafeSession, codex.IgnoredSession)):
+                        codex.root_session(payload, root)
 
     def test_missing_or_nonrestorable_record_is_skipped(self):
         bad = self.record()

@@ -6,9 +6,9 @@ from pathlib import Path
 import sys
 import time
 
-from conversation_common import (IgnoredSession, MAX_INPUT, UnsafeSession, ancestors, pane_agent,
+from conversation_common import (IgnoredSession, MAX_INPUT, UnsafeSession, pane_agent,
                                  process_arguments, process_snapshot, single_line,
-                                 tmux, tmux_context)
+                                 tmux, tmux_context, verify_hook_owner)
 from conversation_providers import PROVIDERS
 
 OPTION = "@resurrect-conversation"
@@ -22,10 +22,7 @@ def capture(payload, context, provider):
     pane_pid = int(details[1])
     processes = process_snapshot()
     owner = pane_agent(pane_pid, processes, provider.NAME)
-    lineage = [processes[pid] for pid in ancestors(os.getpid(), processes)
-               if Path(processes[pid].executable).name == provider.NAME]
-    if len(lineage) != 1 or lineage[0].pid != owner.pid:
-        raise UnsafeSession("hook is not owned by the foreground " + provider.NAME)
+    verify_hook_owner(os.getpid(), owner, processes, provider)
     base = {"version": 1, "provider": provider.NAME, "pid": owner.pid,
             "pidStartSeconds": owner.started, "paneId": pane, "panePID": pane_pid}
     try:
