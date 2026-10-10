@@ -10,7 +10,6 @@ NAME = "claude"
 ENV_NAME = "CLAUDE_CONFIG_DIR"
 DEFAULT_DIR = "~/.claude"
 SETTINGS_FILE = "settings.json"
-HOOK_CHILD_SUBCOMMANDS = frozenset()
 
 
 def root_session(payload, config_dir):

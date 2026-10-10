@@ -100,18 +100,6 @@ def foreground_agent(pane_pid, processes, names):
     raise NotAgent()
 
 
-def verify_hook_owner(hook_pid, owner, processes, provider):
-    """Allow only known runtime helpers between a hook and its pane owner."""
-    lineage = [processes[pid] for pid in ancestors(hook_pid, processes)
-               if Path(processes[pid].executable).name == provider.NAME]
-    if not lineage or lineage[-1].pid != owner.pid:
-        raise UnsafeSession("hook is not owned by the foreground " + provider.NAME)
-    for child in lineage[:-1]:
-        args, _ = process_arguments(child.pid, provider.ENV_NAME)
-        if len(args) < 2 or args[1] not in provider.HOOK_CHILD_SUBCOMMANDS:
-            raise UnsafeSession("hook came from an unsupported nested " + provider.NAME)
-
-
 def select_record(pane_pid, processes, records, name):
     process = pane_agent(pane_pid, processes, name)
     matches = []
