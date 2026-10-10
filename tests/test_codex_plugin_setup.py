@@ -23,6 +23,9 @@ class PluginSetupTests(unittest.TestCase):
         self.home = self.base / "codex home"
         self.home.mkdir()
         self.path = self.home / "hooks.json"
+        self.claude_home = self.base / "claude home"
+        self.claude_home.mkdir()
+        self.claude_path = self.claude_home / "settings.json"
         self.xdg = self.base / "config"
         (self.xdg / "tmux").mkdir(parents=True)
         self.config = self.xdg / "tmux/tmux.conf"
@@ -32,7 +35,8 @@ class PluginSetupTests(unittest.TestCase):
         self.config.write_text(self.settings)
         self.env = {k: v for k, v in os.environ.items()
                     if not k.startswith(("TMUX", "CMUX", "CODEX", "RESURRECT"))}
-        self.env.update(CODEX_HOME=str(self.home), XDG_CONFIG_HOME=str(self.xdg))
+        self.env.update(CODEX_HOME=str(self.home), CLAUDE_CONFIG_DIR=str(self.claude_home),
+                        XDG_CONFIG_HOME=str(self.xdg))
         self.addCleanup(lambda: self.tmux("kill-server", check=False))
         self.tmux("new-session", "-d", "-s", "setup")
 
@@ -40,7 +44,7 @@ class PluginSetupTests(unittest.TestCase):
         return subprocess.run(["tmux", "-S", str(self.socket), "-f", str(self.config), *args],
                               env=self.env, text=True, capture_output=True, check=check, timeout=30)
 
-    def load(self, strategy="codex"):
+    def load(self, strategy="conversation"):
         self.tmux("set-option", "-g", "@resurrect-save-command-strategy", strategy)
         self.tmux("run-shell", "bash " + shlex.quote(str(ROOT / "resurrect.tmux")))
 
@@ -64,10 +68,11 @@ class PluginSetupTests(unittest.TestCase):
         for event in ("SessionStart", "UserPromptSubmit"):
             self.assertIn(event, config["hooks"], "plugin load did not register the event")
             handlers = [hook for group in config["hooks"][event] for hook in group["hooks"]
-                        if "--tmux-resurrect-codex-hook-v1" in hook.get("command", "")]
+                        if "--tmux-resurrect-conversation-hook-v1" in hook.get("command", "")]
             self.assertEqual(len(handlers), 1)
             argv = shlex.split(handlers[0]["command"])
-            self.assertEqual(Path(argv[1]).name, "codex_session_recorder.py")
+            self.assertEqual(Path(argv[1]).name, "conversation_hook.py")
+            self.assertEqual(argv[2], "codex")
             self.assertTrue(Path(argv[1]).is_file(), "registered recorder must exist")
         self.assertEqual(self.status(), "registered")
         return config
@@ -90,8 +95,25 @@ class PluginSetupTests(unittest.TestCase):
     def test_default_strategy_leaves_codex_configuration_untouched(self):
         self.load("ps")
         self.assertFalse(self.path.exists())
+        self.assertFalse(self.claude_path.exists())
         self.assertEqual(self.status(), "")
         self.assertTrue(self.tmux("show-options", "-gqv", "@resurrect-save-script-path").stdout.strip())
+
+    def test_conversation_registers_both_agents_once(self):
+        self.claude_path.write_text('{"theme":"dark"}')
+        self.load("conversation")
+        self.assert_registered()
+        config = json.loads(self.claude_path.read_text())
+        self.assertEqual(config["theme"], "dark")
+        for event in ("SessionStart", "UserPromptSubmit"):
+            handlers = [hook for group in config["hooks"][event] for hook in group["hooks"]]
+            self.assertEqual(len(handlers), 1)
+            self.assertIn("conversation_hook.py claude", handlers[0]["command"])
+        self.assertEqual(self.tmux("show-options", "-gqv", "@resurrect-claude-hooks-status").stdout.strip(),
+                         "registered")
+        previous = self.claude_path.read_bytes()
+        self.load("conversation")
+        self.assertEqual(self.claude_path.read_bytes(), previous)
 
     def test_bad_config_reports_failure_without_breaking_plugin_and_can_retry(self):
         self.path.write_text("{broken")
@@ -140,7 +162,7 @@ class PluginSetupTests(unittest.TestCase):
         plugins.mkdir()
         self.tmux("set-environment", "-g", "TMUX_PLUGIN_MANAGER_PATH", str(plugins))
         self.config.write_text(self.settings +
-            "set -g @resurrect-save-command-strategy codex\n" +
+            "set -g @resurrect-save-command-strategy conversation\n" +
             "set -g @resurrect-processes '\"~codex resume\"'\n" +
             "set -g @plugin " + shlex.quote(str(source) + "#test") + "\n" +
             "run-shell " + shlex.quote(str(Path(TPM) / "tpm")) + "\n")

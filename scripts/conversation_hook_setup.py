@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add/remove only this plugin's hooks. Never change trust or other hooks."""
+"""Install/remove one provider's conversation hook handlers safely."""
 import argparse
 import copy
 import fcntl
@@ -13,27 +13,30 @@ import sys
 import tempfile
 import time
 
-MARKER = "--tmux-resurrect-codex-hook-v1"
+from conversation_providers import PROVIDERS
+
+MARKER = "--tmux-resurrect-conversation-hook-v1"
 EVENTS = ("SessionStart", "UserPromptSubmit")
 
 
-def ours(hook):
+def ours(hook, provider):
     if not isinstance(hook, dict) or hook.get("type") != "command":
         return False
     try:
         args = shlex.split(hook.get("command", ""))
-        return (len(args) == 3 and args[2] == MARKER
-                and Path(args[1]).name == "codex_session_recorder.py")
+        return (len(args) == 4 and args[2:] == [provider.NAME, MARKER]
+                and Path(args[1]).name == "conversation_hook.py")
     except ValueError:
         return False
 
 
-def update(config, install):
+def update(config, install, provider):
     result = copy.deepcopy(config)
     if not isinstance(result, dict) or not isinstance(result.get("hooks", {}), dict):
-        raise ValueError("hooks.json must contain an object with an optional hooks object")
+        raise ValueError("settings must contain an object with an optional hooks object")
     hooks = result.setdefault("hooks", {})
-    command = "python3 " + shlex.quote(str(Path(__file__).resolve().with_name("codex_session_recorder.py"))) + " " + MARKER
+    command = ("python3 " + shlex.quote(str(Path(__file__).resolve().with_name("conversation_hook.py")))
+               + " " + provider.NAME + " " + MARKER)
     for event in EVENTS:
         groups = hooks.get(event, [])
         if not isinstance(groups, list):
@@ -43,7 +46,7 @@ def update(config, install):
             if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
                 raise ValueError("hook groups must contain a hooks array")
             handlers = group.get("hooks", [])
-            remaining = [hook for hook in handlers if not ours(hook)]
+            remaining = [hook for hook in handlers if not ours(hook, provider)]
             if remaining or remaining == handlers:
                 kept.append({**group, "hooks": remaining} if remaining != handlers else group)
         if install:
@@ -55,15 +58,15 @@ def update(config, install):
     return result
 
 
-def update_file(path, install):
+def update_file(path, install, updater):
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Multiple tmux servers can load this plugin against the same Codex home.
+    # Multiple tmux servers can load this plugin against the same config directory.
     lock_path = path.with_name("." + path.name + ".resurrect.lock")
     with os.fdopen(os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600), "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = path.read_bytes() if path.exists() else None
         config = json.loads(before) if before is not None else {}
-        changed = update(config, install)
+        changed = updater(config, install)
         if changed == config:
             return False
         if before is not None:
@@ -80,7 +83,7 @@ def update_file(path, install):
             # Refuse a concurrent editor's change rather than losing it.
             current = path.read_bytes() if path.exists() else None
             if current != before:
-                raise ValueError("hooks.json changed during installation; retry")
+                raise ValueError("settings changed during installation; retry")
             os.replace(temporary, path)
         finally:
             if os.path.exists(temporary):
@@ -91,26 +94,30 @@ def update_file(path, install):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("install", "uninstall"))
-    parser.add_argument("--codex-home", default=os.environ.get("CODEX_HOME", "~/.codex"))
+    parser.add_argument("--provider", required=True, choices=tuple(PROVIDERS))
+    parser.add_argument("--config-dir")
     args = parser.parse_args()
     if sys.version_info < (3, 9):
-        print("Resurrect Codex hooks require Python 3.9 or newer.", file=sys.stderr)
+        print("Resurrect conversation hooks require Python 3.9 or newer.", file=sys.stderr)
         return 1
+    provider = PROVIDERS[args.provider]
     try:
-        configured = Path(args.codex_home).expanduser().absolute() / "hooks.json"
-        path = configured.resolve()  # Preserve a dotfiles-managed symlink.
+        config_dir = args.config_dir or os.environ.get(provider.ENV_NAME, provider.DEFAULT_DIR)
+        configured = Path(config_dir).expanduser().absolute() / provider.SETTINGS_FILE
+        path = configured.resolve()
         if not path.exists() and args.action == "uninstall":
-            print("No resurrect Codex hooks installed.")
+            print("No " + provider.NAME + " conversation hooks installed.")
             return 0
-        if not update_file(path, args.action == "install"):
-            print("Codex hooks already up to date.")
+        updater = lambda config, install: update(config, install, provider)
+        if not update_file(path, args.action == "install", updater):
+            print(provider.NAME + " conversation hooks already up to date.")
             return 0
-        print("Resurrect Codex hooks " + ("installed." if args.action == "install" else "removed."))
-        if args.action == "install":
-            print("In Codex, review/trust the two new hooks with /hooks. Existing hooks were preserved.")
+        print(provider.NAME + " conversation hooks "
+              + ("installed." if args.action == "install" else "removed."))
         return 0
     except (OSError, ValueError, TypeError):
-        print("Cannot update Codex hooks: check the JSON structure, file access, and concurrent edits. Configuration was not replaced.", file=sys.stderr)
+        print("Cannot update " + provider.NAME + " hooks: check JSON, file access and concurrent edits.",
+              file=sys.stderr)
         return 1
 
 

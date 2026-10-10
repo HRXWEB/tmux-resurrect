@@ -13,7 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 A = "01950000-0000-7000-8000-000000000001"
 B = "01950000-0000-7000-8000-000000000002"
-OPTION = "@resurrect-codex-session"
+OPTION = "@resurrect-conversation"
 
 
 @unittest.skipUnless(shutil.which("tmux") and shutil.which("cc"), "requires tmux and cc")
@@ -31,7 +31,8 @@ class StandaloneCodexTests(unittest.TestCase):
                     if not k.startswith(("CMUX", "TMUX", "CODEX", "RESURRECT"))}
         self.env.update(PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
                         CODEX_HOME=str(self.home), CODEX_TEST_LOG_DIR=str(self.logs),
-                        CODEX_TEST_HOOK=str(ROOT / "scripts/codex_session_recorder.py"),
+                        CODEX_TEST_HOOK=str(ROOT / "scripts/conversation_hook.py"),
+                        CODEX_TEST_PROVIDER="codex",
                         CODEX_TEST_EMITTER=str(ROOT / "tests/fixtures/emit_codex_hook.py"), LC_ALL="C")
         self.config = self.base / "tmux.conf"
         self.config.write_text("\n".join([
@@ -39,7 +40,7 @@ class StandaloneCodexTests(unittest.TestCase):
             # under Linux dash; upstream ps intentionally captures direct children.
             "set -g default-shell /bin/sh", "set -g default-command 'exec /bin/sh'",
             "set -g status off", "set -g base-index 0", "set -g pane-base-index 0",
-            "set -g @resurrect-save-command-strategy codex",
+            "set -g @resurrect-save-command-strategy conversation",
             "set -g @resurrect-processes '\"~codex resume\"'",
             "set -g @resurrect-dir " + shlex.quote(str(self.snapshots)),
         ]) + "\n")
@@ -123,7 +124,7 @@ class StandaloneCodexTests(unittest.TestCase):
         self.wait(lambda: self.binding("work:0.0") and self.binding("work:0.1"))
         restored = [p.read_text().splitlines() for p in set(self.logs.glob("*.argv")) - old]
         self.assertEqual({tuple(a[1:3]) for a in restored}, {("resume", A), ("resume", B)})
-        # No new user prompt: a native SessionStart event is enough for resave.
+        # A CLI that emits SessionStart on resume can resave before a prompt.
         self.script("save.sh")
         self.assertEqual({shlex.split(c)[4] for c in self.commands()}, {A, B})
 
@@ -134,18 +135,46 @@ class StandaloneCodexTests(unittest.TestCase):
         self.tmux("set-option", "-p", "-t", "work:0.0", OPTION, "")
         r = self.script("save.sh", success=False)
         self.assertEqual((last.readlink(), last.read_bytes()), before)
-        self.assertIn("Codex", r.stderr)
+        self.assertIn("conversation", r.stderr)
+        self.assertIn("work:0.0 (%0)", r.stderr)
 
-    def test_restored_idle_process_without_hook_cannot_erase_resume_snapshot(self):
+    def test_missing_hook_identifies_second_pane(self):
+        first = self.launch(); self.fire(first, A)
+        self.tmux("split-window", "-d", "-t", "work:0", "-c", str(self.base))
+        self.launch("work:0.1")
+        result = self.script("save.sh", success=False)
+        self.assertIn("work:0.1 (%1)", result.stderr)
+        self.assertIn("submit a prompt in this pane", result.stderr)
+        self.assertNotIn("work:0.0 (%0): save deferred", result.stderr)
+
+    def test_interactive_resume_picker_uses_hook_selected_id(self):
+        pid = self.launch(args="resume")
+        self.fire(pid, B)
+        self.script("save.sh")
+        self.assertIn("codex resume " + B, self.commands()[0])
+
+    def test_explicit_resume_id_saves_before_first_hook(self):
+        self.transcript(B)
+        self.tmux("set-environment", "-g", "CODEX_TEST_SKIP_RESUME_HOOK", "1")
+        self.launch(args="resume " + B)
+        self.assertIsNone(self.binding())
+        self.script("save.sh")
+        self.assertIn("codex resume " + B, self.commands()[0])
+
+    def test_interactive_resume_picker_waits_for_hook(self):
+        self.launch(args="resume")
+        result = self.script("save.sh", success=False)
+        self.assertIn("work:0.0 (%0)", result.stderr)
+        self.assertFalse((self.snapshots / "last").exists())
+
+    def test_restored_idle_explicit_resume_resaves_without_hook(self):
         pid = self.launch(); self.fire(pid); self.script("save.sh")
-        last = self.snapshots / "last"; before = (last.readlink(), last.read_bytes())
         old = set(self.logs.glob("*.argv"))
         self.tmux("kill-server")
         self.env["CODEX_TEST_SKIP_RESUME_HOOK"] = "1"
         self.start_server("0"); self.script("restore.sh")
         self.wait(lambda: len(set(self.logs.glob("*.argv")) - old) == 1)
-        self.script("save.sh", success=False)
-        self.assertEqual((last.readlink(), last.read_bytes()), before)
+        self.script("save.sh")
         self.assertIn("codex resume " + A, self.commands()[0])
 
     def test_switching_conversation_replaces_id_without_persisting_prompt(self):
@@ -169,7 +198,7 @@ class StandaloneCodexTests(unittest.TestCase):
         pid = self.launch(); self.fire(pid, A); before = self.binding()
         payload = {"session_id": B, "hook_event_name": "SessionStart", "cwd": str(self.base),
                    "transcript_path": str(self.transcript(B))}
-        r = subprocess.run(["python3", str(ROOT / "scripts/codex_session_recorder.py")],
+        r = subprocess.run(["python3", str(ROOT / "scripts/conversation_hook.py"), "codex"],
                            input=json.dumps(payload), text=True, capture_output=True,
                            env={**self.env, "TMUX_PANE": "%0"})
         self.assertEqual(r.returncode, 0, r.stderr)
