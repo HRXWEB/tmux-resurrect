@@ -30,12 +30,20 @@ def main():
         name, owner = foreground_agent(pane_pid, processes, PROVIDERS)
         raw = tmux(socket, "show-options", "-pqv", "-t", pane, OPTION)
         if not raw:
-            raise UnsafeSession("waiting for this process's recording hook")
+            hint = getattr(PROVIDERS[name], "MISSING_RECORD_HINT", "")
+            raise UnsafeSession("waiting for this process's recording hook"
+                                + ("; " + hint if hint else ""))
         record = json.loads(raw)
         if (record.get("version") != 1 or record.get("provider") != name
                 or record.get("paneId") != pane or record.get("panePID") != pane_pid):
             raise UnsafeSession("stale pane recording")
-        record = select_record(pane_pid, processes, [record], name)
+        try:
+            record = select_record(pane_pid, processes, [record], name)
+        except UnsafeSession as error:
+            hint = getattr(PROVIDERS[name], "MISSING_RECORD_HINT", "")
+            if hint and str(error).startswith("no " + name + " hook record"):
+                raise UnsafeSession(str(error) + "; " + hint) from None
+            raise
         command = PROVIDERS[name].resume_command(record)
         if (foreground_agent(pane_pid, process_snapshot(), PROVIDERS) != (name, owner)
                 or tmux(socket, "show-options", "-pqv", "-t", pane, OPTION) != raw):

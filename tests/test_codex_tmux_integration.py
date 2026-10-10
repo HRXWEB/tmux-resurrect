@@ -124,7 +124,7 @@ class StandaloneCodexTests(unittest.TestCase):
         self.wait(lambda: self.binding("work:0.0") and self.binding("work:0.1"))
         restored = [p.read_text().splitlines() for p in set(self.logs.glob("*.argv")) - old]
         self.assertEqual({tuple(a[1:3]) for a in restored}, {("resume", A), ("resume", B)})
-        # No new user prompt: a native SessionStart event is enough for resave.
+        # A CLI that emits SessionStart on resume can resave before a prompt.
         self.script("save.sh")
         self.assertEqual({shlex.split(c)[4] for c in self.commands()}, {A, B})
 
@@ -144,7 +144,14 @@ class StandaloneCodexTests(unittest.TestCase):
         self.launch("work:0.1")
         result = self.script("save.sh", success=False)
         self.assertIn("work:0.1 (%1)", result.stderr)
+        self.assertIn("submit a prompt in this pane", result.stderr)
         self.assertNotIn("work:0.0 (%0): save deferred", result.stderr)
+
+    def test_interactive_resume_picker_uses_hook_selected_id(self):
+        pid = self.launch(args="resume")
+        self.fire(pid, B)
+        self.script("save.sh")
+        self.assertIn("codex resume " + B, self.commands()[0])
 
     def test_restored_idle_process_without_hook_cannot_erase_resume_snapshot(self):
         pid = self.launch(); self.fire(pid); self.script("save.sh")

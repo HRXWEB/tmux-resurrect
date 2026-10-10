@@ -11,6 +11,10 @@ NAME = "codex"
 ENV_NAME = "CODEX_HOME"
 DEFAULT_DIR = "~/.codex"
 SETTINGS_FILE = "hooks.json"
+MISSING_RECORD_HINT = (
+    "Codex may wait until the first prompt to run its hook; "
+    "submit a prompt in this pane, then retry (check /hooks if it persists)"
+)
 
 
 def root_session(payload, home):

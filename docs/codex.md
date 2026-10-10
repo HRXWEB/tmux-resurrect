@@ -8,6 +8,9 @@ subagent and noninteractive sessions, and builds `codex resume <UUID> --cd <cwd>
 The Codex hooks are installed in `CODEX_HOME/hooks.json` for `SessionStart` and
 `UserPromptSubmit`. Review and trust them in Codex `/hooks`. A registration status
 of `registered` does not prove that Codex has run the hooks.
+An interactive `codex resume` picker is supported once the chosen conversation's
+hook runs. Codex 0.162.1 may wait for the first prompt after resuming before
+recording it; see [save and restore](conversation.md#save-and-restore).
 For Codex 0.157+, disable shared daemon auto-start and stop any existing daemon
 before launching a new session; see [Codex shared daemon](conversation.md#codex-shared-daemon).
 

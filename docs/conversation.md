@@ -64,9 +64,15 @@ daemon is running.
 When saving, the strategy verifies the hook's tmux pane, foreground process,
 PID generation, root transcript and session ID. A failed check defers the
 entire snapshot and retains the previous `last` file. This protects a known
-resume command if a newly restored process has not run its hook yet. After
-restoring, a `SessionStart` hook can bind the new process without a user prompt.
-Failure messages name the tmux pane as `session:window.pane (%pane_id)`.
+resume command if a newly restored process has not run its hook yet. Failure
+messages name the tmux pane as `session:window.pane (%pane_id)`.
+
+For Codex, `codex resume` may show an interactive session picker. The recorded
+hook supplies the session ID selected there, so the saved command uses that
+exact ID. On Codex 0.162.1, a resumed TUI may not run its hook until the first
+prompt is submitted. If saving is deferred for that pane, submit a prompt there
+and retry. The session files alone do not reliably identify which Codex process
+owns an ID. If the hook still does not run, check trust and status in `/hooks`.
 
 Claude's `-c` / `--continue` is deliberately not used: it selects the most
 recent session for a directory and can confuse two panes in the same project.
