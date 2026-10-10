@@ -153,16 +153,28 @@ class StandaloneCodexTests(unittest.TestCase):
         self.script("save.sh")
         self.assertIn("codex resume " + B, self.commands()[0])
 
-    def test_restored_idle_process_without_hook_cannot_erase_resume_snapshot(self):
+    def test_explicit_resume_id_saves_before_first_hook(self):
+        self.transcript(B)
+        self.tmux("set-environment", "-g", "CODEX_TEST_SKIP_RESUME_HOOK", "1")
+        self.launch(args="resume " + B)
+        self.assertIsNone(self.binding())
+        self.script("save.sh")
+        self.assertIn("codex resume " + B, self.commands()[0])
+
+    def test_interactive_resume_picker_waits_for_hook(self):
+        self.launch(args="resume")
+        result = self.script("save.sh", success=False)
+        self.assertIn("work:0.0 (%0)", result.stderr)
+        self.assertFalse((self.snapshots / "last").exists())
+
+    def test_restored_idle_explicit_resume_resaves_without_hook(self):
         pid = self.launch(); self.fire(pid); self.script("save.sh")
-        last = self.snapshots / "last"; before = (last.readlink(), last.read_bytes())
         old = set(self.logs.glob("*.argv"))
         self.tmux("kill-server")
         self.env["CODEX_TEST_SKIP_RESUME_HOOK"] = "1"
         self.start_server("0"); self.script("restore.sh")
         self.wait(lambda: len(set(self.logs.glob("*.argv")) - old) == 1)
-        self.script("save.sh", success=False)
-        self.assertEqual((last.readlink(), last.read_bytes()), before)
+        self.script("save.sh")
         self.assertIn("codex resume " + A, self.commands()[0])
 
     def test_switching_conversation_replaces_id_without_persisting_prompt(self):

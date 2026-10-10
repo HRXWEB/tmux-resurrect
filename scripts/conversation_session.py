@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import time
 
 from conversation_common import (NotAgent, UnsafeSession, foreground_agent,
                                  process_snapshot, select_record, tmux)
@@ -30,6 +31,21 @@ def main():
         name, owner = foreground_agent(pane_pid, processes, PROVIDERS)
         raw = tmux(socket, "show-options", "-pqv", "-t", pane, OPTION)
         if not raw:
+            fallback = getattr(PROVIDERS[name], "record_from_resume_arguments", None)
+            if fallback:
+                cwd = tmux(socket, "display-message", "-p", "-t", pane,
+                           "#{pane_current_path}")
+                recovered = fallback(owner, cwd)
+                if recovered:
+                    record = {"version": 1, "provider": name, "pid": owner.pid,
+                              "pidStartSeconds": owner.started, "paneId": pane,
+                              "panePID": pane_pid, "updatedAt": time.time(), **recovered}
+                    record = select_record(pane_pid, processes, [record], name)
+                    command = PROVIDERS[name].resume_command(record)
+                    if foreground_agent(pane_pid, process_snapshot(), PROVIDERS) != (name, owner):
+                        raise UnsafeSession("conversation changed during save")
+                    print(command)
+                    return 0
             hint = getattr(PROVIDERS[name], "MISSING_RECORD_HINT", "")
             raise UnsafeSession("waiting for this process's recording hook"
                                 + ("; " + hint if hint else ""))

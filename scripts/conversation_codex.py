@@ -5,7 +5,8 @@ from pathlib import Path
 import shlex
 import uuid
 
-from conversation_common import IgnoredSession, UnsafeSession, single_line
+from conversation_common import (IgnoredSession, UnsafeSession, process_arguments,
+                                 single_line)
 
 NAME = "codex"
 ENV_NAME = "CODEX_HOME"
@@ -15,6 +16,34 @@ MISSING_RECORD_HINT = (
     "Codex may wait until the first prompt to run its hook; "
     "submit a prompt in this pane, then retry (check /hooks if it persists)"
 )
+
+
+def record_from_resume_arguments(owner, cwd):
+    """Recover an explicit resume ID before Codex emits its first hook."""
+    args, captured_dir = process_arguments(owner.pid, ENV_NAME)
+    if len(args) < 3 or Path(args[0]).name != NAME or args[1] != "resume":
+        return None
+    try:
+        session = str(uuid.UUID(args[2]))
+    except (ValueError, TypeError, AttributeError):
+        return None  # Interactive picker or another resume selector.
+    options = launch_options(args[1:])
+    config_dir = captured_dir or str(Path(DEFAULT_DIR).expanduser())
+    if not os.path.isabs(config_dir):
+        raise UnsafeSession("CODEX_HOME must be absolute")
+    home = Path(config_dir).resolve(strict=True)
+    paths = [path for folder in ("sessions", "archived_sessions")
+             for path in (home / folder).rglob("*" + session + ".jsonl")]
+    if len(paths) != 1:
+        raise UnsafeSession("resume ID has no unique local Codex transcript")
+    root_session({"session_id": session, "transcript_path": str(paths[0])}, home)
+    cwd = single_line(cwd)
+    if not os.path.isabs(cwd):
+        raise UnsafeSession("working directory must be absolute")
+    launch = {"arguments": [NAME] + options}
+    if captured_dir:
+        launch["environment"] = {ENV_NAME: single_line(captured_dir)}
+    return {"sessionId": session, "cwd": cwd, "launchCommand": launch}
 
 
 def root_session(payload, home):
