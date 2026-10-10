@@ -76,6 +76,10 @@ the first prompt is submitted. If saving is deferred, submit a prompt in that
 pane and retry. Session files alone do not reliably identify which process owns
 an ID. If the hook still does not run, check trust and status in `/hooks`.
 
+The Codex provider accepts root CLI/TUI transcripts under `CODEX_HOME` and
+rejects subagent and noninteractive sessions. It preserves supported launch
+flags, omits prompts, and defers saving for unknown launch options.
+
 Claude's `-c` / `--continue` is deliberately not used: it selects the most
 recent session for a directory and can confuse two panes in the same project.
 Only interactive `claude` processes with simple launch options are supported.
@@ -97,5 +101,4 @@ python3 <plugin-directory>/scripts/conversation_hook_setup.py uninstall --provid
 ```
 
 Switch back to `ps` before reloading the plugin if you no longer want
-conversation hooks registered. See [Codex details](codex.md) for the Codex
-provider rules.
+conversation hooks registered.
