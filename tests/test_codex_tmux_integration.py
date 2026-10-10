@@ -136,6 +136,15 @@ class StandaloneCodexTests(unittest.TestCase):
         r = self.script("save.sh", success=False)
         self.assertEqual((last.readlink(), last.read_bytes()), before)
         self.assertIn("conversation", r.stderr)
+        self.assertIn("work:0.0 (%0)", r.stderr)
+
+    def test_missing_hook_identifies_second_pane(self):
+        first = self.launch(); self.fire(first, A)
+        self.tmux("split-window", "-d", "-t", "work:0", "-c", str(self.base))
+        self.launch("work:0.1")
+        result = self.script("save.sh", success=False)
+        self.assertIn("work:0.1 (%1)", result.stderr)
+        self.assertNotIn("work:0.0 (%0): save deferred", result.stderr)
 
     def test_restored_idle_process_without_hook_cannot_erase_resume_snapshot(self):
         pid = self.launch(); self.fire(pid); self.script("save.sh")

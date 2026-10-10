@@ -114,7 +114,8 @@ class ClaudeTmuxTests(unittest.TestCase):
         self.script("save.sh")
         last = self.snapshots / "last"; before = (last.readlink(), last.read_bytes())
         self.tmux("set-option", "-p", "-t", "work:0.0", "@resurrect-conversation", "")
-        self.script("save.sh", success=False)
+        result = self.script("save.sh", success=False)
+        self.assertIn("work:0.0 (%0)", result.stderr)
         self.assertEqual((last.readlink(), last.read_bytes()), before)
 
 

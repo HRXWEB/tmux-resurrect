@@ -11,18 +11,23 @@ from conversation_providers import PROVIDERS
 
 
 def main():
+    pane_label = "unknown pane"
     try:
         if len(sys.argv) != 2 or not sys.argv[1].isdigit():
             raise UnsafeSession("invalid pane PID")
         pane_pid = int(sys.argv[1])
-        processes = process_snapshot()
-        name, owner = foreground_agent(pane_pid, processes, PROVIDERS)
+        pane_label = f"pane PID {pane_pid}"
         socket = os.environ["TMUX"].rsplit(",", 2)[0]
-        panes = tmux(socket, "list-panes", "-a", "-F", "#{pane_pid} #{pane_id}").splitlines()
-        matches = {row.split()[1] for row in panes if row.split()[0] == str(pane_pid)}
+        panes = tmux(socket, "list-panes", "-a", "-F",
+                     "#{pane_pid}\t#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}").splitlines()
+        matches = [fields for row in panes if len(fields := row.split("\t", 2)) == 3
+                   and fields[0] == str(pane_pid)]
         if len(matches) != 1:
             raise UnsafeSession("pane ownership is ambiguous")
-        pane = matches.pop()
+        _, pane, location = matches[0]
+        pane_label = f"{location} ({pane})"
+        processes = process_snapshot()
+        name, owner = foreground_agent(pane_pid, processes, PROVIDERS)
         raw = tmux(socket, "show-options", "-pqv", "-t", pane, OPTION)
         if not raw:
             raise UnsafeSession("waiting for this process's recording hook")
@@ -41,7 +46,8 @@ def main():
         return 2
     except Exception as error:
         message = str(error) if isinstance(error, UnsafeSession) else "recording unavailable"
-        print("tmux-resurrect conversation: save deferred: " + message, file=sys.stderr)
+        print(f"tmux-resurrect conversation: {pane_label}: save deferred: {message}",
+              file=sys.stderr)
         return 1
 
 

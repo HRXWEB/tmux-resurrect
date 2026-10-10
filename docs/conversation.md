@@ -40,6 +40,25 @@ python3 <plugin-directory>/scripts/conversation_hook_setup.py install --provider
 `@resurrect-codex-hooks-status` and `@resurrect-claude-hooks-status` report
 `registered` or `error`. Registration does not prove a hook has fired.
 
+### Codex shared daemon
+
+Codex 0.157 and later can run interactive sessions through a shared app-server
+daemon. Hooks launched by that daemon inherit its environment, which may contain
+the tmux pane of an earlier Codex client. The daemon's hook input does not
+identify the current client pane, so this strategy cannot safely save those
+sessions. To use pane-specific Codex restoration, disable automatic daemon
+startup in `~/.codex/config.toml`:
+
+```toml
+[features]
+daemon_auto_start = false
+```
+
+This setting does not disconnect an existing daemon. After finishing any Codex
+sessions using it, run `codex app-server daemon stop` and then start a new Codex
+session. `codex app-server daemon version` reports a connection error when no
+daemon is running.
+
 ## Save and restore
 
 When saving, the strategy verifies the hook's tmux pane, foreground process,
@@ -47,6 +66,7 @@ PID generation, root transcript and session ID. A failed check defers the
 entire snapshot and retains the previous `last` file. This protects a known
 resume command if a newly restored process has not run its hook yet. After
 restoring, a `SessionStart` hook can bind the new process without a user prompt.
+Failure messages name the tmux pane as `session:window.pane (%pane_id)`.
 
 Claude's `-c` / `--continue` is deliberately not used: it selects the most
 recent session for a directory and can confuse two panes in the same project.

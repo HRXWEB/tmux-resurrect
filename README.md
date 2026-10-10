@@ -5,6 +5,8 @@ Hooks record each tmux pane's session ID so saves restore its exact conversation
 This works on the tmux host without cmux. The upstream save strategy remains
 the default. The `conversation` strategy automatically registers the required
 hooks when the plugin loads.
+Codex 0.157+ must run without its shared daemon for pane-specific recording;
+see the [conversation setup guide](docs/conversation.md#codex-shared-daemon).
 
 [![Build Status](https://travis-ci.org/tmux-plugins/tmux-resurrect.svg?branch=master)](https://travis-ci.org/tmux-plugins/tmux-resurrect)
 

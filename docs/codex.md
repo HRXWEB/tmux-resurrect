@@ -8,6 +8,8 @@ subagent and noninteractive sessions, and builds `codex resume <UUID> --cd <cwd>
 The Codex hooks are installed in `CODEX_HOME/hooks.json` for `SessionStart` and
 `UserPromptSubmit`. Review and trust them in Codex `/hooks`. A registration status
 of `registered` does not prove that Codex has run the hooks.
+For Codex 0.157+, disable shared daemon auto-start and stop any existing daemon
+before launching a new session; see [Codex shared daemon](conversation.md#codex-shared-daemon).
 
 The provider preserves supported explicit launch flags, validates the foreground
 process and PID generation, and omits prompts. Unknown or unsafe launch forms
