@@ -131,7 +131,10 @@ def launch_options(args):
         if option in ("-c", "--config"):
             key = value.split("=", 1)[0].strip()
             if key == "hooks" or key.startswith("hooks."):
-                raise UnsafeSession("captured inline hooks require a fresh launch configuration")
+                # Injected hooks can refer to an old pane/socket/owner. Let the
+                # restore environment supply fresh hooks instead of replaying them.
+                index += 1
+                continue
         if option not in ("--cd", "-C"):
             preserved.extend([option, value])
         index += 1

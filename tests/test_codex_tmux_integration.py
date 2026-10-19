@@ -138,6 +138,22 @@ class StandaloneCodexTests(unittest.TestCase):
         self.assertIn("conversation", r.stderr)
         self.assertIn("work:0.0 (%0)", r.stderr)
 
+    def test_inline_hooks_are_not_replayed_after_server_restart(self):
+        args = ["--model", "test-model", "-c", "hooks.SessionStart=[]",
+                "--config", 'hooks.state.old.trusted_hash="sha256:old"']
+        pid = self.launch(args=shlex.join(args)); self.fire(pid)
+        self.script("save.sh")
+        self.assertNotIn("hooks", json.dumps(self.binding()))
+        self.assertNotIn("hooks", self.commands()[0])
+        old = set(self.logs.glob("*.argv"))
+        self.tmux("kill-server"); self.start_server("0")
+        self.script("restore.sh")
+        log = self.wait(lambda: next(iter(set(self.logs.glob("*.argv")) - old), None))
+        self.wait(lambda: log.stat().st_size)
+        self.assertEqual(log.read_text().splitlines()[1:],
+                         ["resume", A, "--model", "test-model", "--cd", str(self.base),
+                          "CODEX_HOME=" + str(self.home)])
+
     def test_missing_hook_identifies_second_pane(self):
         first = self.launch(); self.fire(first, A)
         self.tmux("split-window", "-d", "-t", "work:0", "-c", str(self.base))

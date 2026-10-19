@@ -79,6 +79,11 @@ an ID. If the hook still does not run, check trust and status in `/hooks`.
 The Codex provider accepts root CLI/TUI transcripts under `CODEX_HOME` and
 rejects subagent and noninteractive sessions. It preserves supported launch
 flags, omits prompts, and defers saving for unknown launch options.
+Inline `-c` / `--config` entries for `hooks` and `hooks.*` (including hook
+trust hashes) are omitted from the captured launch options and resume command.
+They can contain temporary pane, socket, or process bindings. Restoration uses
+the hooks supplied by the current configuration and launch environment; other
+supported launch options are preserved.
 
 Claude's `-c` / `--continue` is deliberately not used: it selects the most
 recent session for a directory and can confuse two panes in the same project.

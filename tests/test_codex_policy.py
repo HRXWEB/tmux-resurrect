@@ -112,10 +112,23 @@ class CodexPolicyTests(unittest.TestCase):
 
     def test_unsupported_invocations_are_rejected_instead_of_losing_options(self):
         for args in (["exec", "do something"], ["--remote", "ws://host"],
-                     ["--unknown-flag"], ["-m"], ["--worktree"], ["--image", "photo.png"],
-                     ["-c", "hooks.SessionStart=[]"]):
+                     ["--unknown-flag"], ["-m"], ["--worktree"], ["--image", "photo.png"]):
             with self.subTest(args=args), self.assertRaises(self.m.UnsafeSession):
                 self.m.resume_command(self.record(args=args))
+
+    def test_resume_omits_inline_hooks_and_preserves_other_config(self):
+        for config in (["-c", "hooks.SessionStart=[]"],
+                       ["--config", "hooks={}"],
+                       ["--config=hooks.UserPromptSubmit=[]"],
+                       ["-c=hooks.state.old.trusted_hash=\"sha256:old\""]):
+            with self.subTest(config=config):
+                record = self.record(args=["--model", "test-model", *config,
+                                           "-c", 'model_reasoning_effort="high"',
+                                           "--config", 'hooks_extra="keep"'])
+                self.assertEqual(shlex.split(self.m.resume_command(record)),
+                                 ["codex", "resume", A, "--model", "test-model",
+                                  "-c", 'model_reasoning_effort="high"',
+                                  "--config", 'hooks_extra="keep"', "--cd", "/same project"])
 
     def test_missing_capture_invalid_ids_and_control_characters_are_rejected(self):
         cases = []
