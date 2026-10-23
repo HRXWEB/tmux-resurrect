@@ -1,4 +1,22 @@
-# Tmux Resurrect
+# Tmux Resurrect (Archived)
+
+> [!IMPORTANT]
+> This repository is archived and retained as a historical reference.
+> For current installations, use the official
+> [tmux-plugins/tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
+> with [HRXWEB/tmux-resurrect-agents](https://github.com/HRXWEB/tmux-resurrect-agents)
+> for Claude Code and Codex conversation recovery.
+
+```tmux
+set -g @plugin 'tmux-plugins/tmux-resurrect'
+set -g @plugin 'HRXWEB/tmux-resurrect-agents'
+```
+
+See the [companion installation guide](https://github.com/HRXWEB/tmux-resurrect-agents#install-with-tpm)
+for setup and explicit Agent hook installation. The documentation below
+describes this archived implementation.
+
+## Historical documentation
 
 This fork adds optional [Codex and Claude Code conversation restoration](docs/conversation.md).
 Hooks record each tmux pane's session ID so saves restore its exact conversation.

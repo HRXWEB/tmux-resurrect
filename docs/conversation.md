@@ -1,5 +1,11 @@
 # Restore Codex and Claude Code conversations
 
+> [!IMPORTANT]
+> This guide describes an archived implementation. For current setup, use
+> [tmux-plugins/tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect)
+> with [HRXWEB/tmux-resurrect-agents](https://github.com/HRXWEB/tmux-resurrect-agents).
+> Follow the companion's installation instructions for Agent hooks.
+
 The opt-in `conversation` save strategy records the exact session ID of each
 foreground Codex or Claude Code process in a tmux pane. It writes `codex resume <UUID>` or
 `claude --resume <UUID>` into the tmux-resurrect snapshot. The conversations
